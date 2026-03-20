@@ -1,0 +1,12 @@
+{
+  "cron": {
+    "jobs": [
+      {
+        "id": "tabby-vault-monitor",
+        "schedule": "*/5 * * * *",
+        "command": "cd /app/skills/tabby-borrower && node dist/bin/tabby-borrower.js monitor-vaults --quiet-ok",
+        "enabled": true
+      }
+    ]
+  }
+}
