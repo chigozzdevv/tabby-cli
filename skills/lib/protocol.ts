@@ -35,6 +35,7 @@ export const debtPoolAbi = [
   { type: "function", name: "deposit", stateMutability: "nonpayable", inputs: [{ name: "assets", type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "withdraw", stateMutability: "nonpayable", inputs: [{ name: "shares", type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "treasuryFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
+  { type: "function", name: "treasuryFeeRecipient", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", name: "walletRegistry", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
 ] as const;
 

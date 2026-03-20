@@ -344,12 +344,12 @@ async function fetchMarketOverview(protocol: ProtocolConfig): Promise<MarketOver
       return {
         asset: assetSnapshot,
         config: {
-          borrowLtvBps: Number(config.borrowLtvBps),
-          liquidationThresholdBps: Number(config.liquidationThresholdBps),
-          liquidationBonusBps: Number(config.liquidationBonusBps),
-          supplyCap: config.supplyCap.toString(),
-          valueCapUsd: config.valueCapUsd.toString(),
-          enabled: config.enabled,
+          borrowLtvBps: Number(config.borrowLtvBps ?? config[0]),
+          liquidationThresholdBps: Number(config.liquidationThresholdBps ?? config[1]),
+          liquidationBonusBps: Number(config.liquidationBonusBps ?? config[2]),
+          supplyCap: (config.supplyCap ?? config[3]).toString(),
+          valueCapUsd: (config.valueCapUsd ?? config[4]).toString(),
+          enabled: config.enabled ?? config[5],
         },
       };
     })
