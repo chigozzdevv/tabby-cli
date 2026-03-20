@@ -1,0 +1,28 @@
+[04:14:25.767] Server  ERROR   ⨯ Error: Cannot find module 'next/dist/client/components/builtin/global-not-found'
+Require stack:
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/dev/on-demand-entry-handler.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/dev/hot-reloader-turbopack.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/router-utils/setup-dev-bundler.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/router-server.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/start-server.js
+[04:14:25.790] Server  ERROR   Error: Cannot find module 'next/dist/pages/_error'
+Require stack:
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/dev/on-demand-entry-handler.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/dev/hot-reloader-turbopack.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/router-utils/setup-dev-bundler.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/router-server.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/start-server.js
+[04:14:25.806] Server  ERROR   ⨯ Error: Cannot find module 'next/dist/pages/_error'
+Require stack:
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/dev/on-demand-entry-handler.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/dev/hot-reloader-turbopack.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/router-utils/setup-dev-bundler.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/router-server.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/start-server.js
+[04:14:25.823] Server  ERROR   Error: Cannot find module 'next/dist/pages/_error'
+Require stack:
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/dev/on-demand-entry-handler.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/dev/hot-reloader-turbopack.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/router-utils/setup-dev-bundler.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/router-server.js
+- /Users/chigozzdev/Desktop/tabby/client/node_modules/next/dist/server/lib/start-server.js

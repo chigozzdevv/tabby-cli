@@ -1,0 +1,22 @@
+{
+  "name": "tabby-skills",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "tabby-borrower": "./dist/tabby-borrower/bin/tabby-borrower.js",
+    "tabby-lp": "./dist/tabby-lp/bin/tabby-lp.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "viem": "^2.22.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "typescript": "^5.7.3"
+  }
+}
