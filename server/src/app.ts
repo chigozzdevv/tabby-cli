@@ -10,12 +10,20 @@ import { registerAssistantRoutes } from "@/features/assistant/assistant.routes.j
 import { registerLiquidityRoutes } from "@/features/liquidity/liquidity.routes.js";
 import { registerMonitoringRoutes } from "@/features/monitoring/monitoring.routes.js";
 import { registerPublicConfigRoutes } from "@/features/public-config/public-config.routes.js";
+import socketio from "fastify-socket.io";
 import { HttpError } from "@/shared/http-errors.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = fastify({
     logger: loggerOptions,
     requestTimeout: 30_000,
+  });
+
+  await app.register(socketio as any, {
+    cors: {
+      origin: env.CORS_ORIGIN ?? true,
+      credentials: true,
+    },
   });
 
   await app.register(cors, {

@@ -8,7 +8,7 @@ const app = await buildApp();
 try {
   await app.listen({ host: "0.0.0.0", port: env.PORT });
   logger.info({ port: env.PORT }, "server-started");
-  startActivitySync();
+  startActivitySync(app);
 } catch (error) {
   logger.error({ error }, "server-start-failed");
   process.exit(1);

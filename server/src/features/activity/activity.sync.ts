@@ -3,6 +3,7 @@ import { logger } from "@/config/logger.js";
 import { publicClient } from "@/shared/viem.js";
 import { debtPoolAbi, vaultManagerAbi } from "@/shared/protocol.js";
 import { getActivityCursor, recordActivityEvent, setActivityCursor } from "@/features/activity/activity.service.js";
+import type { FastifyInstance } from "fastify";
 
 const poolCursorKey = "debt-pool";
 const vaultCursorKey = "vault-manager";
@@ -110,7 +111,7 @@ async function syncDebtPoolActivityOnce() {
       const account = item.log.args.account?.toLowerCase();
       if (!account || item.log.args.assets === undefined || item.log.args.shares === undefined) continue;
 
-      await recordActivityEvent({
+      const event = await recordActivityEvent({
         type: item.kind === "deposited" ? "lp.deposited" : "lp.withdrawn",
         dedupeKey: `${item.kind === "deposited" ? "lp.deposited" : "lp.withdrawn"}:${txHash}:${logIndex}`,
         owner: account,
@@ -124,6 +125,10 @@ async function syncDebtPoolActivityOnce() {
         },
         createdAt,
       });
+
+      if (globalApp?.io) {
+        globalApp.io.emit("new-activity", event);
+      }
     }
 
     await setActivityCursor(poolCursorKey, Number(end));
@@ -255,7 +260,7 @@ async function syncVaultActivityOnce() {
       if (item.kind === "opened") {
         const eventOwner = item.log.args.owner?.toLowerCase();
         if (!eventOwner) continue;
-        await recordActivityEvent({
+        const event = await recordActivityEvent({
           type: "vault.opened",
           dedupeKey: `vault.opened:${txHash}:${logIndex}`,
           owner: eventOwner,
@@ -267,13 +272,17 @@ async function syncVaultActivityOnce() {
           payload: { owner: eventOwner },
           createdAt,
         });
+
+        if (globalApp?.io) {
+          globalApp.io.emit("new-activity", event);
+        }
         continue;
       }
 
       if (item.kind === "operator") {
         const operator = item.log.args.operator?.toLowerCase();
         if (!owner || !operator || item.log.args.allowed === undefined) continue;
-        await recordActivityEvent({
+        const event = await recordActivityEvent({
           type: "vault.operator-updated",
           dedupeKey: `vault.operator-updated:${txHash}:${logIndex}`,
           owner,
@@ -288,12 +297,16 @@ async function syncVaultActivityOnce() {
           },
           createdAt,
         });
+
+        if (globalApp?.io) {
+          globalApp.io.emit("new-activity", event);
+        }
         continue;
       }
 
       if (item.kind === "collateral-deposited") {
         if (!owner || item.log.args.asset === undefined || item.log.args.amount === undefined) continue;
-        await recordActivityEvent({
+        const event = await recordActivityEvent({
           type: "collateral.deposited",
           dedupeKey: `collateral.deposited:${txHash}:${logIndex}`,
           owner,
@@ -307,12 +320,16 @@ async function syncVaultActivityOnce() {
           },
           createdAt,
         });
+
+        if (globalApp?.io) {
+          globalApp.io.emit("new-activity", event);
+        }
         continue;
       }
 
       if (item.kind === "collateral-withdrawn") {
         if (!owner || item.log.args.asset === undefined || item.log.args.amount === undefined || item.log.args.to === undefined) continue;
-        await recordActivityEvent({
+        const event = await recordActivityEvent({
           type: "collateral.withdrawn",
           dedupeKey: `collateral.withdrawn:${txHash}:${logIndex}`,
           owner,
@@ -328,6 +345,10 @@ async function syncVaultActivityOnce() {
           },
           createdAt,
         });
+
+        if (globalApp?.io) {
+          globalApp.io.emit("new-activity", event);
+        }
         continue;
       }
 
@@ -337,7 +358,7 @@ async function syncVaultActivityOnce() {
         if (!eventOwner || !receiver || item.log.args.amount === undefined || item.log.args.normalizedDebtAdded === undefined || item.log.args.borrowRateBps === undefined) {
           continue;
         }
-        await recordActivityEvent({
+        const event = await recordActivityEvent({
           type: "debt.borrowed",
           dedupeKey: `debt.borrowed:${txHash}:${logIndex}`,
           owner: eventOwner,
@@ -354,6 +375,10 @@ async function syncVaultActivityOnce() {
           },
           createdAt,
         });
+
+        if (globalApp?.io) {
+          globalApp.io.emit("new-activity", event);
+        }
         continue;
       }
 
@@ -362,7 +387,7 @@ async function syncVaultActivityOnce() {
         if (!owner || !payer || item.log.args.amount === undefined || item.log.args.normalizedDebtRepaid === undefined || item.log.args.remainingDebt === undefined) {
           continue;
         }
-        await recordActivityEvent({
+        const event = await recordActivityEvent({
           type: "debt.repaid",
           dedupeKey: `debt.repaid:${txHash}:${logIndex}`,
           owner,
@@ -379,6 +404,10 @@ async function syncVaultActivityOnce() {
           },
           createdAt,
         });
+
+        if (globalApp?.io) {
+          globalApp.io.emit("new-activity", event);
+        }
         continue;
       }
 
@@ -387,7 +416,7 @@ async function syncVaultActivityOnce() {
         if (!owner || !liquidator || item.log.args.collateralAsset === undefined || item.log.args.repaidDebt === undefined || item.log.args.normalizedDebtRepaid === undefined || item.log.args.seizedCollateral === undefined || item.log.args.remainingDebt === undefined) {
           continue;
         }
-        await recordActivityEvent({
+        const event = await recordActivityEvent({
           type: "vault.liquidated",
           dedupeKey: `vault.liquidated:${txHash}:${logIndex}`,
           owner,
@@ -406,6 +435,10 @@ async function syncVaultActivityOnce() {
           },
           createdAt,
         });
+
+        if (globalApp?.io) {
+          globalApp.io.emit("new-activity", event);
+        }
         continue;
       }
 
@@ -414,7 +447,7 @@ async function syncVaultActivityOnce() {
       if (!owner || !resolver || !collateralReceiver || item.log.args.writtenOffDebt === undefined || item.log.args.normalizedDebtWrittenOff === undefined) {
         continue;
       }
-      await recordActivityEvent({
+      const event = await recordActivityEvent({
         type: "vault.bad-debt-resolved",
         dedupeKey: `vault.bad-debt-resolved:${txHash}:${logIndex}`,
         owner,
@@ -431,6 +464,10 @@ async function syncVaultActivityOnce() {
         },
         createdAt,
       });
+
+      if (globalApp?.io) {
+        globalApp.io.emit("new-activity", event);
+      }
     }
 
     await setActivityCursor(vaultCursorKey, Number(end));
@@ -451,8 +488,11 @@ async function syncLoop() {
   }
 }
 
-export function startActivitySync() {
+let globalApp: FastifyInstance | null = null;
+
+export function startActivitySync(app: FastifyInstance) {
   if (started || !env.ACTIVITY_SYNC_ENABLED) return;
+  globalApp = app;
   started = true;
   void syncLoop();
 }
