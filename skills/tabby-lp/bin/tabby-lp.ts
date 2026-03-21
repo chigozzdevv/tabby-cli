@@ -29,6 +29,11 @@ type PoolOverview = {
 };
 
 const maxUint256 = (1n << 256n) - 1n;
+const defaultGasFloorWei = BigInt(getEnv().TABBY_MIN_GAS_WEI || "10000000000000000");
+
+async function sendNotification(message: string) {
+    console.log(`NOTIFICATION: ${message}`);
+}
 
 async function getPoolOverview(publicClient: any, protocol: ProtocolConfig): Promise<PoolOverview> {
   const [
@@ -83,7 +88,7 @@ Commands:
   init-wallet [--force]
   pool-status [--json]
   deposit-liquidity --amount <n>
-  withdraw-liquidity --shares <n> | --amount <n>
+  withdraw-liquidity <--amount <n> | --shares <n> | --all>
   monitor-pool
 `);
 }
@@ -161,10 +166,68 @@ Pool Status (${overview.assetSymbol}):
       await publicClient.waitForTransactionReceipt({ hash });
       console.log(" Successfully deposited.");
     } else if (cmd === "withdraw-liquidity") {
-      console.log("Withdrawal command initiated (Logic to be finalized)");
+      const sharesStr = process.argv.find((a, i) => process.argv[i-1] === "--shares");
+      const amountStr = process.argv.find((a, i) => process.argv[i-1] === "--amount");
+      const isAll = process.argv.includes("--all");
+      if (!sharesStr && !amountStr && !isAll) throw new Error("Missing --shares, --amount, or --all");
+      
+      const wallet = await loadWallet();
+      const account = privateKeyToAccount(wallet.privateKey);
+      const walletClient = createWalletClient({ account, chain: publicClient.chain, transport: http(protocol.rpcUrl) }) as any;
+
+      const decimals = await publicClient.readContract({ address: protocol.debtAsset, abi: erc20Abi, functionName: "decimals" });
+      
+      let sharesToWithdraw: bigint;
+      if (isAll) {
+        sharesToWithdraw = await publicClient.readContract({ 
+          address: protocol.debtPool, 
+          abi: debtPoolAbi, 
+          functionName: "balanceOf", 
+          args: [wallet.address] 
+        }) as any;
+      } else if (sharesStr) {
+        sharesToWithdraw = parseUnits(sharesStr, 18);
+      } else {
+        const amount = parseUnits(amountStr!, Number(decimals));
+        sharesToWithdraw = await publicClient.readContract({
+           address: protocol.debtPool,
+           abi: debtPoolAbi,
+           functionName: "previewDeposit",
+           args: [amount]
+        }) as any;
+      }
+
+      process.stdout.write(`Withdrawing ${sharesToWithdraw.toString()} shares...`);
+      const hash = await walletClient.writeContract({ 
+        address: protocol.debtPool, 
+        abi: debtPoolAbi, 
+        functionName: "withdraw", 
+        args: [sharesToWithdraw] 
+      });
+      await publicClient.waitForTransactionReceipt({ hash });
+      console.log(" Successfully withdrawn.");
     } else if (cmd === "monitor-pool") {
         const overview = await getPoolOverview(publicClient, protocol);
         console.log(`Yield is currently ${(overview.supplyApyBps / 100).toFixed(2)}%. Pool utilization: ${(overview.utilizationBps / 100).toFixed(2)}%`);
+        
+        if (overview.utilizationBps > 9000) {
+            const msg = "WARNING: Pool utilization is very high (>90%). Withdrawal liquidity may be limited.";
+            console.warn(msg);
+            await sendNotification(msg);
+        }
+        if (overview.supplyApyBps < 100) {
+            const msg = "ADVISORY: Pool yield is low (<1%). Consider re-evaluating your position.";
+            console.warn(msg);
+            await sendNotification(msg);
+        }
+
+        const walletRes = await loadWallet().catch(() => undefined);
+        if (walletRes) {
+            const balance = await publicClient.getBalance({ address: walletRes.address });
+            if (balance < defaultGasFloorWei) {
+                await sendNotification(`Low gas balance on LP wallet ${walletRes.address}: ${formatUnits(balance, 18)} XPL`);
+            }
+        }
     } else {
       usage();
     }

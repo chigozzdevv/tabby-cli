@@ -5,12 +5,10 @@ import path from "node:path";
 import process from "node:process";
 import { randomUUID } from "node:crypto";
 import { 
-  createPublicClient, 
   createWalletClient, 
   http, 
   formatUnits, 
   parseUnits, 
-  encodeFunctionData, 
   decodeEventLog, 
   maxUint256 
 } from "viem";
@@ -684,6 +682,21 @@ async function commandOpenVault() {
   printJson({ vaultId: openedVaultId, txHash: hash });
 }
 
+async function commandApproveCollateral() {
+  const protocol = await resolveProtocolConfig();
+  const market = await fetchMarketOverview(protocol);
+  const asset = asAddress(getArg("--asset"), "asset") ?? (await resolveDefaultCollateralAsset(protocol, market));
+  const { wallet, account } = await loadBorrowerAccount();
+  const decimals = await loadTokenDecimals(protocol, asset);
+  const amount = parseAmountToWei({ amount: getArg("--amount"), amountWei: getArg("--amount-wei"), decimals, label: "approval" });
+
+  const { chain, publicClient } = createClients(protocol);
+  const walletClient = createWalletClient({ account, chain, transport: http(protocol.rpcUrl) }) as any;
+
+  const result = await ensureAllowance({ publicClient, walletClient, token: asset, owner: wallet.address as `0x${string}`, spender: protocol.vaultManager, requiredAmount: amount });
+  printJson({ ok: true, txHash: result.hash, asset, spender: protocol.vaultManager });
+}
+
 async function commandDepositCollateral() {
   const protocol = await resolveProtocolConfig();
   const market = await fetchMarketOverview(protocol);
@@ -695,6 +708,9 @@ async function commandDepositCollateral() {
 
   const { chain, publicClient } = createClients(protocol);
   const walletClient = createWalletClient({ account, chain, transport: http(protocol.rpcUrl) }) as any;
+  
+  await ensureAllowance({ publicClient, walletClient, token: asset, owner: account.address, spender: protocol.vaultManager, requiredAmount: amount });
+
   const hash = await walletClient.writeContract({
     address: protocol.vaultManager,
     abi: vaultManagerAbi,
@@ -732,7 +748,10 @@ async function commandRepay() {
   const vaultId = Number(requireArg("--vault-id"));
   const { wallet, account } = await loadBorrowerAccount();
   const vault = await fetchVaultSummary(protocol, vaultId);
-  const amount = parseAmountToWei({ amount: getArg("--amount"), amountWei: getArg("--amount-wei"), decimals: market.debtAsset.decimals, label: "repay" });
+  const amountArg = getArg("--amount");
+  const amount = (amountArg === "all") 
+    ? BigInt(vault.debtWei)
+    : parseAmountToWei({ amount: amountArg, amountWei: getArg("--amount-wei"), decimals: market.debtAsset.decimals, label: "repay" });
 
   const { chain, publicClient } = createClients(protocol);
   const walletClient = createWalletClient({ account, chain, transport: http(protocol.rpcUrl) }) as any;
@@ -756,7 +775,16 @@ async function commandWithdrawCollateral() {
   const vaultId = Number(requireArg("--vault-id"));
   const { account } = await loadBorrowerAccount();
   const decimals = await loadTokenDecimals(protocol, asset);
-  const amount = parseAmountToWei({ amount: getArg("--amount"), amountWei: getArg("--amount-wei"), decimals, label: "withdraw" });
+  const amountArg = getArg("--amount");
+  let amount: bigint;
+  if (amountArg === "all") {
+    const vault = await fetchVaultSummary(protocol, vaultId);
+    const collat = vault.collaterals.find(c => c.asset.address.toLowerCase() === asset.toLowerCase());
+    if (!collat) throw new Error("No collateral balance for this asset in vault");
+    amount = BigInt(collat.balanceWei);
+  } else {
+    amount = parseAmountToWei({ amount: amountArg, amountWei: getArg("--amount-wei"), decimals, label: "withdraw" });
+  }
   const receiver = asAddress(getArg("--to"), "receiver") ?? (await loadWallet()).address;
 
   const { chain, publicClient } = createClients(protocol);
@@ -769,6 +797,30 @@ async function commandWithdrawCollateral() {
   });
   await publicClient.waitForTransactionReceipt({ hash });
   printJson({ txHash: hash, vaultId, asset, amountWei: amount.toString(), to: receiver });
+}
+
+async function commandLiquidate() {
+  const protocol = await resolveProtocolConfig();
+  const vaultId = Number(requireArg("--vault-id"));
+  const market = await fetchMarketOverview(protocol);
+  const asset = asAddress(getArg("--asset"), "asset") ?? (await resolveDefaultCollateralAsset(protocol, market));
+  const { account } = await loadBorrowerAccount();
+  const decimals = market.debtAsset.decimals;
+  const amount = parseAmountToWei({ amount: getArg("--amount"), amountWei: getArg("--amount-wei"), decimals, label: "liquidation repay" });
+
+  const { chain, publicClient } = createClients(protocol);
+  const walletClient = createWalletClient({ account, chain, transport: http(protocol.rpcUrl) }) as any;
+
+  await ensureAllowance({ publicClient, walletClient, token: protocol.debtAsset, owner: account.address as `0x${string}`, spender: protocol.vaultManager, requiredAmount: amount });
+
+  const hash = await walletClient.writeContract({
+    address: protocol.vaultManager,
+    abi: vaultManagerAbi,
+    functionName: "liquidate",
+    args: [BigInt(vaultId), asset, amount],
+  });
+  await publicClient.waitForTransactionReceipt({ hash });
+  printJson({ txHash: hash, vaultId, collateralAsset: asset, repaidAmountWei: amount.toString() });
 }
 
 async function commandVaultStatus() {
@@ -784,7 +836,121 @@ async function commandVaultStatus() {
 }
 
 async function commandMonitorVaults() {
-    console.log("Monitor command initiated (Logic refactored to use shared lib)");
+  const protocol = await resolveProtocolConfig();
+  const state = await tryLoadState();
+  const trackedIds = state?.trackedVaultIds ?? [];
+  
+  if (trackedIds.length === 0) {
+    if (!hasFlag("--quiet-ok")) {
+      console.log("No vaults tracked for monitoring.");
+    }
+    return;
+  }
+
+  const market = await fetchMarketOverview(protocol);
+  const results = [];
+
+  for (const vaultId of trackedIds) {
+    try {
+      const vault = await fetchVaultSummary(protocol, vaultId);
+      const hf = BigInt(vault.healthFactorE18);
+      
+      let status = "HEALTHY";
+      if (hf < criticalHealthFactorDefault) status = "CRITICAL";
+      else if (hf < warnHealthFactorDefault) status = "WARNING";
+
+      results.push({
+        vaultId,
+        healthFactor: formatHealthFactor(hf),
+        status,
+        debtUsd: formatUsd(BigInt(vault.debtValueUsd)),
+      });
+
+      if (status !== "HEALTHY") {
+        await sendNotification(`Vault ${vaultId} status: ${status} (HF: ${formatHealthFactor(hf)})`);
+      }
+    } catch (err: any) {
+      console.error(`Failed to monitor vault ${vaultId}: ${err.message}`);
+    }
+  }
+
+  const walletRes = await tryLoadWallet();
+  if (walletRes) {
+    const { publicClient } = createClients(protocol);
+    const balance = await publicClient.getBalance({ address: walletRes.address });
+    if (balance < defaultGasFloorWei) {
+      await sendNotification(`Low gas balance on ${walletRes.address}: ${formatUnits(balance, 18)} XPL`);
+    }
+  }
+
+  if (hasFlag("--json")) {
+    printJson({ vaults: results });
+  } else {
+    if (results.length > 0) {
+      console.table(results);
+    }
+  }
+}
+
+async function commandPrepareBindOperator() {
+  const protocol = await resolveProtocolConfig();
+  const vaultId = Number(requireArg("--vault-id"));
+  const { wallet } = await loadBorrowerAccount();
+  
+  const url = new URL("/assistant/bindings/prepare", baseUrl()).toString();
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      vaultId,
+      operator: wallet.address,
+      allowed: true
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(`Failed to prepare binding: ${err.message || res.statusText}`);
+  }
+
+  const payload = await res.json();
+  if (!payload.ok) throw new Error(payload.message || "Failed to prepare binding");
+
+  const data = payload.data;
+  console.log(`Binding prepared for Vault ${vaultId}.`);
+  console.log(`Please sign the following transaction with the Vault Owner wallet:`);
+  console.log(JSON.stringify(data.transaction, null, 2));
+  if (data.binding.bindingId) {
+    console.log(`Binding ID: ${data.binding.bindingId}`);
+  }
+}
+
+async function commandConfirmBindOperator() {
+  const protocol = await resolveProtocolConfig();
+  const vaultId = Number(requireArg("--vault-id"));
+  const { wallet } = await loadBorrowerAccount();
+  const bindingId = getArg("--binding-id");
+
+  const url = new URL("/assistant/bindings/confirm", baseUrl()).toString();
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      vaultId,
+      operator: wallet.address,
+      bindingId
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(`Failed to confirm binding: ${err.message || res.statusText}`);
+  }
+
+  const payload = await res.json();
+  if (!payload.ok) throw new Error(payload.message || "Failed to confirm binding");
+
+  console.log(`Binding confirmed! Asset is now authorized as operator for Vault ${vaultId}. Status: ${payload.data.status}`);
 }
 
 function usage() {
@@ -796,12 +962,16 @@ Commands:
   market [--json]
   quote-borrow --collateral <asset:amount> [--collateral <asset:amount> ...]
   open-vault
+  approve-collateral --amount <n> [--asset <addr>]
   deposit-collateral --vault-id <id> --amount <n> [--asset <addr>]
   borrow --vault-id <id> --amount <n> [--receiver <addr>]
-  repay --vault-id <id> --amount <n>
-  withdraw-collateral --vault-id <id> --amount <n> [--asset <addr>] [--to <addr>]
+  repay --vault-id <id> --amount <n|all>
+  withdraw-collateral --vault-id <id> --amount <n|all> [--asset <addr>] [--to <addr>]
   vault-status --vault-id <id> [--json]
   monitor-vaults [--json]
+  liquidate --vault-id <id> --amount <n> [--asset <addr>]
+  prepare-bind-operator --vault-id <id>
+  confirm-bind-operator --vault-id <id> [--binding-id <id>]
 `);
 }
 
@@ -814,12 +984,16 @@ async function main() {
     case "market": await commandMarket(); break;
     case "quote-borrow": await commandQuoteBorrow(); break;
     case "open-vault": await commandOpenVault(); break;
+    case "approve-collateral": await commandApproveCollateral(); break;
     case "deposit-collateral": await commandDepositCollateral(); break;
     case "borrow": await commandBorrow(); break;
     case "repay": await commandRepay(); break;
     case "withdraw-collateral": await commandWithdrawCollateral(); break;
     case "vault-status": await commandVaultStatus(); break;
     case "monitor-vaults": await commandMonitorVaults(); break;
+    case "liquidate": await commandLiquidate(); break;
+    case "prepare-bind-operator": await commandPrepareBindOperator(); break;
+    case "confirm-bind-operator": await commandConfirmBindOperator(); break;
     default: usage();
   }
 }

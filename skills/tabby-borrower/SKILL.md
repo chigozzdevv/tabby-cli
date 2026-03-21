@@ -31,35 +31,36 @@ npm run build
 cp .env.example .env
 
 # Create the skill wallet
-node dist/bin/tabby-borrower.js init-wallet
+npx tabby-borrower init-wallet
 
 # Read live market config
-node dist/bin/tabby-borrower.js market
+npx tabby-borrower market
 
 # Quote borrowing power from intended collateral
-node dist/bin/tabby-borrower.js quote-borrow \
+npx tabby-borrower quote-borrow \
   --collateral 0xASSET:1.25 \
   --desired-borrow 500
 
 # Open a vault owned by the skill wallet
-node dist/bin/tabby-borrower.js open-vault
+npx tabby-borrower open-vault
 
 # Approve and deposit collateral
-node dist/bin/tabby-borrower.js approve-collateral --asset 0xASSET --amount 1.25
-node dist/bin/tabby-borrower.js deposit-collateral --vault-id 1 --asset 0xASSET --amount 1.25
+npx tabby-borrower approve-collateral --asset 0xASSET --amount 1.25
+npx tabby-borrower deposit-collateral --vault-id 1 --asset 0xASSET --amount 1.25
 
 # Borrow / repay / withdraw
-node dist/bin/tabby-borrower.js borrow --vault-id 1 --amount 500
-node dist/bin/tabby-borrower.js repay --vault-id 1 --amount 100
-node dist/bin/tabby-borrower.js withdraw-collateral --vault-id 1 --asset 0xASSET --amount 0.1
+npx tabby-borrower borrow --vault-id 1 --amount 500
+npx tabby-borrower repay --vault-id 1 --amount all
+npx tabby-borrower withdraw-collateral --vault-id 1 --asset 0xASSET --amount all
 
 # Inspect and monitor vaults
-node dist/bin/tabby-borrower.js vault-status --vault-id 1
-node dist/bin/tabby-borrower.js monitor-vaults --quiet-ok
+npx tabby-borrower vault-status --vault-id 1
+npx tabby-borrower monitor-vaults --quiet-ok
+npx tabby-borrower liquidate --vault-id 1 --amount 100 --asset 0xASSET
 
 # Prepare operator binding for a human-owned vault
-node dist/bin/tabby-borrower.js prepare-bind-operator --vault-id 1
-node dist/bin/tabby-borrower.js confirm-bind-operator --vault-id 1
+npx tabby-borrower prepare-bind-operator --vault-id 1
+npx tabby-borrower confirm-bind-operator --vault-id 1
 ```
 
 ## Operator Model
@@ -92,7 +93,7 @@ Use OpenClaw cron for periodic monitoring:
       {
         id: "tabby-vault-monitor",
         schedule: "*/5 * * * *",
-        command: "cd /app/skills/tabby-borrower && node dist/bin/tabby-borrower.js monitor-vaults --quiet-ok",
+        command: "cd /app/skills && npx tabby-borrower monitor-vaults --quiet-ok",
         enabled: true
       }
     ]

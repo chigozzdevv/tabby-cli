@@ -21,19 +21,19 @@ npm install
 npm run build
 
 # Create the skill wallet (if not already done)
-node dist/bin/tabby-lp.js init-wallet
+npx tabby-lp init-wallet
 
 # Read pool metrics and yield
-node dist/bin/tabby-lp.js pool-status
+npx tabby-lp pool-status
 
 # Deposit liquidity
-node dist/bin/tabby-lp.js deposit-liquidity --amount 100
+npx tabby-lp deposit-liquidity --amount 100
 
 # Withdraw liquidity
-node dist/bin/tabby-lp.js withdraw-liquidity --shares 50
+npx tabby-lp withdraw-liquidity --all
 
 # Monitor pool yield and health
-node dist/bin/tabby-lp.js monitor-pool
+npx tabby-lp monitor-pool
 ```
 
 ## Agent LP Model
@@ -50,7 +50,7 @@ Agents can serve as automated LPs:
       {
         id: "tabby-lp-monitor",
         schedule: "0 * * * *", // Hourly
-        command: "cd /app/skills/tabby-lp && node dist/bin/tabby-lp.js monitor-pool",
+        command: "cd /app/skills && npx tabby-lp monitor-pool",
         enabled: true
       }
     ]
