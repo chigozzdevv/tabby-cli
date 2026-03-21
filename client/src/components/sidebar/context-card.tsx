@@ -4,7 +4,7 @@ import { MoveRight } from "lucide-react";
 
 export interface ContextItem {
   id: string;
-  type: "loan" | "pool";
+  type: "loan" | "pool" | "vault";
   title: string;
   subtitle: string;
   stats: { label: string; value: string }[];
@@ -26,14 +26,14 @@ export const ContextCard: React.FC<{ item: ContextItem }> = ({ item }) => {
         <div>
           <div className="text-[9px] text-tactical-accent uppercase tracking-widest">{item.type}</div>
           <div className="font-black text-[13px] mt-0.5">{item.title}</div>
-          <div className="text-[10px] text-tactical-dim">{item.subtitle}</div>
+          <div className="text-[10px] text-[#999]">{item.subtitle}</div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-tactical-border">
         {item.stats.map((stat, i) => (
           <div key={i}>
-            <div className="text-[8px] text-tactical-dim uppercase tracking-wider">{stat.label}</div>
+            <div className="text-[8px] text-[#999] uppercase tracking-wider">{stat.label}</div>
             <div className="font-bold text-[12px] text-tactical-text">{stat.value}</div>
           </div>
         ))}
