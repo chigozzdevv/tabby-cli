@@ -12,7 +12,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@fastify/cors": "^10.1.0",
+    "@fastify/cors": "^9.0.1",
     "dotenv": "^17.2.0",
     "fastify": "^4.28.0",
     "fastify-socket.io": "^5.1.0",
