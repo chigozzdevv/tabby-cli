@@ -46,7 +46,7 @@ const BOOT_STEPS: BootStep[] = [
       } catch {
         return [
           { text: "Checking server health" },
-          { text: "  └─ status: OFFLINE (mock mode)", color: "warn" },
+          { text: "  └─ status: OFFLINE", color: "warn" },
         ];
       }
     },
@@ -70,7 +70,7 @@ const BOOT_STEPS: BootStep[] = [
       } catch {
         return [
           { text: "Loading protocol config" },
-          { text: "  └─ config: using defaults (offline)", color: "warn" },
+          { text: "  └─ config: unavailable", color: "warn" },
         ];
       }
     },
@@ -91,7 +91,7 @@ const BOOT_STEPS: BootStep[] = [
       } catch {
         return [
           { text: "tabby@kernel:~$ npx tabby-borrower check-wallet", color: "green" },
-          { text: "  └─ wallet: NOT FOUND — run `npx tabby-borrower init-wallet`", color: "warn" },
+          { text: "  └─ wallet: unavailable", color: "warn" },
         ];
       }
     },
@@ -119,8 +119,7 @@ const BOOT_STEPS: BootStep[] = [
       } catch {
         return [
           { text: "Fetching oracle price feeds" },
-          { text: "  ├─ BTC/USD: $64,000.00 (cached)", color: "warn" },
-          { text: "  └─ USDT0/USD: $1.00 (cached)", color: "warn" },
+          { text: "  └─ feeds: unavailable", color: "warn" },
         ];
       }
     },
@@ -147,7 +146,7 @@ const BOOT_STEPS: BootStep[] = [
       } catch {
         return [
           { text: "Syncing liquidity pool" },
-          { text: "  └─ pool: unavailable (offline)", color: "warn" },
+          { text: "  └─ pool: unavailable", color: "warn" },
         ];
       }
     },
