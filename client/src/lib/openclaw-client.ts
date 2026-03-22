@@ -32,7 +32,8 @@ async function getOrCreateDevice() {
   const keyPair = await crypto.subtle.generateKey(ED25519, true, ["sign"]);
   const publicKeyRaw = new Uint8Array(await crypto.subtle.exportKey("raw", keyPair.publicKey));
   const privateKeyPkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
-  const deviceId = crypto.randomUUID();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", publicKeyRaw);
+  const deviceId = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
   const publicKeyB64 = bytesToBase64(publicKeyRaw);
   const privateKeyB64 = bytesToBase64(privateKeyPkcs8);
   localStorage.setItem(DEVICE_KEY, JSON.stringify({ deviceId, publicKeyB64, privateKeyB64 }));
