@@ -48,7 +48,7 @@ class OpenClawClient {
             client: { id: "webchat-ui", displayName: "Tabby Web", mode: "webchat", version: "1.0.0", platform: "web" },
             auth: { token: GATEWAY_TOKEN },
             role: "operator",
-            scopes: ["operator.read", "operator.write"],
+            scopes: ["operator.read", "operator.write", "operator.admin"],
             caps: ["tool-events"],
             locale: navigator.language,
             userAgent: navigator.userAgent,
