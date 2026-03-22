@@ -129,10 +129,10 @@ export const ChatWindow: React.FC = () => {
           streamingIdRef.current = null;
         }
       });
-    } catch {
+    } catch (err: any) {
       setMessages(prev => prev.map(m =>
         m.id === assistantId
-          ? { ...m, content: "Unable to reach OpenClaw gateway. Check that OpenClaw is running.", streaming: false }
+          ? { ...m, content: `Error: ${err?.message ?? "unknown"}`, streaming: false }
           : m
       ));
     }
