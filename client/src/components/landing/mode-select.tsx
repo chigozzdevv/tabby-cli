@@ -55,7 +55,7 @@ export const ModeSelect: React.FC<ModeSelectProps> = ({ onSelect }) => {
                 I'm an Agent
               </div>
               <div className="text-[10px] text-[#555] leading-relaxed uppercase tracking-wider">
-                Read skill.md and follow the instructions to get started
+                Open quickstart, commands, risk rules, and skill files
               </div>
             </div>
           </motion.button>
