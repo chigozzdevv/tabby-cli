@@ -1,7 +1,43 @@
-const GATEWAY_URL = import.meta.env.VITE_OPENCLAW_GATEWAY_URL || "ws://localhost:18789";
+const GATEWAY_URL = import.meta.env.VITE_OPENCLAW_GATEWAY_URL || "ws://localhost:3000/gateway";
 const GATEWAY_TOKEN = import.meta.env.VITE_OPENCLAW_TOKEN || "";
 
+const SCOPES = ["operator.read", "operator.write", "operator.admin", "operator.approvals", "operator.pairing"];
+const DEVICE_KEY = "tabby:device:v1";
+
 export type ChunkHandler = (streamingText: string, done: boolean) => void;
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s);
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const s = atob(b64);
+  const bytes = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+  return bytes;
+}
+
+async function getOrCreateDevice() {
+  const ED25519 = { name: "Ed25519" } as const;
+  const stored = localStorage.getItem(DEVICE_KEY);
+  if (stored) {
+    try {
+      const { deviceId, publicKeyB64, privateKeyB64 } = JSON.parse(stored);
+      const privateKey = await crypto.subtle.importKey("pkcs8", base64ToBytes(privateKeyB64), ED25519, false, ["sign"]);
+      return { deviceId, publicKeyB64, privateKey };
+    } catch {}
+  }
+  const keyPair = await crypto.subtle.generateKey(ED25519, true, ["sign"]);
+  const publicKeyRaw = new Uint8Array(await crypto.subtle.exportKey("raw", keyPair.publicKey));
+  const privateKeyPkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
+  const deviceId = crypto.randomUUID();
+  const publicKeyB64 = bytesToBase64(publicKeyRaw);
+  const privateKeyB64 = bytesToBase64(privateKeyPkcs8);
+  localStorage.setItem(DEVICE_KEY, JSON.stringify({ deviceId, publicKeyB64, privateKeyB64 }));
+  return { deviceId, publicKeyB64, privateKey: keyPair.privateKey };
+}
 
 class OpenClawClient {
   private ws: WebSocket | null = null;
@@ -44,16 +80,48 @@ class OpenClawClient {
 
       ws.onopen = async () => {
         try {
+          // Wait for connect.challenge (up to 3s)
+          const nonce = await new Promise<string>((res) => {
+            const timer = setTimeout(() => res(""), 3000);
+            const handler = (e: MessageEvent) => {
+              try {
+                const f = JSON.parse(e.data);
+                if (f.type === "event" && f.event === "connect.challenge") {
+                  clearTimeout(timer);
+                  ws.removeEventListener("message", handler);
+                  res(f.payload.nonce);
+                }
+              } catch {}
+            };
+            ws.addEventListener("message", handler);
+          });
+
+          let device: any = undefined;
+          if (nonce) {
+            const dev = await getOrCreateDevice();
+            const signedAt = Date.now();
+            const payload = ["v2", dev.deviceId, "webchat-ui", "webchat", "operator", SCOPES.join(","), String(signedAt), GATEWAY_TOKEN, nonce].join("|");
+            const sig = await crypto.subtle.sign("Ed25519", dev.privateKey, new TextEncoder().encode(payload));
+            device = {
+              id: dev.deviceId,
+              publicKey: dev.publicKeyB64,
+              signature: bytesToBase64(new Uint8Array(sig)),
+              signedAt,
+              nonce,
+            };
+          }
+
           await this.rpc("connect", {
             minProtocol: 3,
             maxProtocol: 3,
             client: { id: "webchat-ui", displayName: "Tabby Web", mode: "webchat", version: "1.0.0", platform: "web" },
             auth: { token: GATEWAY_TOKEN },
             role: "operator",
-            scopes: ["operator.read", "operator.write", "operator.admin", "operator.approvals", "operator.pairing"],
+            scopes: SCOPES,
             caps: ["tool-events"],
             locale: navigator.language,
             userAgent: navigator.userAgent,
+            ...(device ? { device } : {}),
           });
           await this.rpc("sessions.messages.subscribe", { key: "main" }).catch(() => {});
           this._connected = true;
