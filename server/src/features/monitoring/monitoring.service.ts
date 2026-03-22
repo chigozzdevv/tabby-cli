@@ -45,7 +45,7 @@ async function getAssetSnapshot(asset: `0x${string}`): Promise<AssetSnapshot> {
       abi: priceOracleAbi,
       functionName: "getPrice",
       args: [asset],
-    }),
+    }).catch(() => 0n),
   ]);
 
   return {
@@ -69,7 +69,7 @@ async function getOracleFeedSnapshot(asset: `0x${string}`): Promise<OracleFeedSn
       abi: priceOracleAbi,
       functionName: "aliases",
       args: [asset],
-    }),
+    }).catch(() => zeroAddress),
   ]);
 
   return {
