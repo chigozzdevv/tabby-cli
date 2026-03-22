@@ -110,9 +110,8 @@ export const ChatWindow: React.FC = () => {
 
     try {
       await openClawClient.send(msg + contextSuffix, (chunk, done) => {
-        accumulatedRef.current += chunk;
-
         if (!done) {
+          accumulatedRef.current += chunk;
           const streamText = extractStreamingText(accumulatedRef.current);
           if (streamText) {
             setMessages(prev => prev.map(m =>
@@ -120,7 +119,8 @@ export const ChatWindow: React.FC = () => {
             ));
           }
         } else {
-          const { text, card } = parseResponse(accumulatedRef.current);
+          const finalContent = chunk || accumulatedRef.current;
+          const { text, card } = parseResponse(finalContent);
           setMessages(prev => prev.map(m =>
             m.id === assistantId
               ? { ...m, content: text, card: card ?? undefined, streaming: false }
