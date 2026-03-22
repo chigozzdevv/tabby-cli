@@ -6,116 +6,147 @@ const BORROWER_SKILL = `# Tabby Borrower
 
 This skill is the borrower/operator runtime for Tabby's Plasma vault protocol.
 
-Model:
-- borrower or agent creates a local wallet
 - vaults live in VaultManager
 - debt is borrowed from DebtPool
 - debt asset is USDT0
-- collateral is configured by the live market
+- collateral assets: WETH, XAUt0, wstETH, WXPL
 - an agent wallet can be bound as a vault operator for a human-owned vault
 
-## Local wallet persistence
+## Local Wallet Persistence
 
-~/.config/tabby-borrower/wallet.json
-~/.config/tabby-borrower/state.json
+- ~/.config/tabby-borrower/wallet.json
+- ~/.config/tabby-borrower/state.json
 
-## Quick Start
+## Commands
 
 \`\`\`bash
-cd {baseDir}
-npm install
-npm run build
-cp .env.example .env
-
-# Create the skill wallet
 npx tabby-borrower init-wallet
-
-# Read live market config
 npx tabby-borrower market
-\`\`\`
-
-## Vault Operations
-
-\`\`\`bash
-# Quote borrowing power
-npx tabby-borrower quote-borrow \\
-  --collateral 0xASSET:1.25 \\
-  --desired-borrow 500
-
-# Open a vault
+npx tabby-borrower quote-borrow --collateral 0xASSET:1.25 --desired-borrow 500
 npx tabby-borrower open-vault
-
-# Deposit collateral
 npx tabby-borrower approve-collateral --asset 0xASSET --amount 1.25
 npx tabby-borrower deposit-collateral --vault-id 1 --asset 0xASSET --amount 1.25
-
-# Borrow / Repay / Withdraw
 npx tabby-borrower borrow --vault-id 1 --amount 500
 npx tabby-borrower repay --vault-id 1 --amount all
 npx tabby-borrower withdraw-collateral --vault-id 1 --asset 0xASSET --amount all
-\`\`\`
-
-## Monitoring
-
-\`\`\`bash
 npx tabby-borrower vault-status --vault-id 1
 npx tabby-borrower monitor-vaults --quiet-ok
 npx tabby-borrower liquidate --vault-id 1 --amount 100 --asset 0xASSET
+npx tabby-borrower prepare-bind-operator --vault-id 1
+npx tabby-borrower confirm-bind-operator --vault-id 1
 \`\`\`
 
 ## Operator Model
 
-For human-owned vaults:
-- the human wallet owns the vault
-- the skill wallet is bound as operator
-- the human signs the binding transaction
-- after binding, the skill can manage the vault
+For human-owned vaults the human wallet owns the vault, the skill wallet is bound as operator through setVaultOperator(...), the human signs the binding transaction, and after binding the skill can manage the vault.
 
-For agent-owned vaults:
-- the skill wallet itself opens and owns the vault`;
+For agent-owned vaults the skill wallet itself opens and owns the vault.
+
+## Monitoring
+
+Use OpenClaw cron for periodic monitoring:
+
+\`\`\`json
+{
+  "cron": {
+    "jobs": [{
+      "id": "tabby-vault-monitor",
+      "schedule": "*/5 * * * *",
+      "command": "cd /app/skills && npx tabby-borrower monitor-vaults --quiet-ok",
+      "enabled": true
+    }]
+  }
+}
+\`\`\`
+
+## Response Format
+
+Always respond in this exact JSON shape. No exceptions.
+
+\`\`\`json
+{
+  "text": "Your natural language response here",
+  "isQuote": false,
+  "isPosition": false,
+  "isPool": false,
+  "isAction": false,
+  "quote": null,
+  "position": null,
+  "pool": null,
+  "action": null
+}
+\`\`\`
+
+- text — always present, your full conversational response
+- At most one of isQuote, isPosition, isPool, isAction is true at a time
+- When a flag is true, populate the matching field with the raw JSON output from the command
+- action shape: { "type": "borrow" | "repay" | "deposit" | "withdraw" | "open-vault", "success": true, "detail": "..." }`;
 
 const LP_SKILL = `# Tabby Liquidity Provider
 
-This skill is the LP runtime for Tabby's Plasma protocol.
-It allows agents and users to provide liquidity to the DebtPool and monitor yields.
+This skill is the LP runtime for Tabby's Plasma protocol. It allows agents and users to provide liquidity to the DebtPool and monitor their yields.
 
-## Local wallet persistence
+## Local Wallet Persistence
 
-~/.config/tabby-lp/wallet.json
-~/.config/tabby-lp/state.json
+- ~/.config/tabby-lp/wallet.json
+- ~/.config/tabby-lp/state.json
 
-## Quick Start
+## Commands
 
 \`\`\`bash
-cd {baseDir}
-npm install
-npm run build
-
-# Create the skill wallet
 npx tabby-lp init-wallet
-
-# Read pool metrics
 npx tabby-lp pool-status
-\`\`\`
-
-## LP Operations
-
-\`\`\`bash
-# Deposit liquidity
+npx tabby-lp position
+npx tabby-lp approve-asset --amount 100
 npx tabby-lp deposit-liquidity --amount 100
-
-# Withdraw liquidity
 npx tabby-lp withdraw-liquidity --all
-
-# Monitor pool
 npx tabby-lp monitor-pool
 \`\`\`
 
-## Agent LP Strategy
+## Agent LP Model
 
-- Yield Capture: monitor pool-status, deposit when Supply APY > target
-- Risk Mitigation: monitor utilizationBps, withdraw if > 95%
-- Autonomous Monitoring: use cron for periodic checks`;
+- Yield Capture: monitor pool-status, deposit when Supply APY exceeds a target
+- Risk Mitigation: monitor utilizationBps, withdraw if utilization exceeds 95%
+
+## Monitoring
+
+Use OpenClaw cron for periodic monitoring:
+
+\`\`\`json
+{
+  "cron": {
+    "jobs": [{
+      "id": "tabby-lp-monitor",
+      "schedule": "0 * * * *",
+      "command": "cd /app/skills && npx tabby-lp monitor-pool",
+      "enabled": true
+    }]
+  }
+}
+\`\`\`
+
+## Response Format
+
+Always respond in this exact JSON shape. No exceptions.
+
+\`\`\`json
+{
+  "text": "Your natural language response here",
+  "isQuote": false,
+  "isPosition": false,
+  "isPool": false,
+  "isAction": false,
+  "quote": null,
+  "position": null,
+  "pool": null,
+  "action": null
+}
+\`\`\`
+
+- text — always present, your full conversational response
+- At most one of isQuote, isPosition, isPool, isAction is true at a time
+- When a flag is true, populate the matching field with the raw JSON output from the command
+- action shape: { "type": "deposit" | "withdraw", "success": true, "detail": "..." }`;
 
 type Tab = "borrower" | "lp";
 

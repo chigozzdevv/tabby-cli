@@ -16,7 +16,7 @@
 
 @layer base {
   body {
-    @apply min-h-screen overflow-x-hidden relative bg-tactical-bg text-tactical-text font-mono text-sm leading-relaxed;
+    @apply h-screen overflow-hidden relative bg-tactical-bg text-tactical-text font-mono text-sm leading-relaxed;
   }
 
   body::before {
@@ -32,7 +32,7 @@
   }
 
   #root {
-    @apply min-h-screen flex flex-col;
+    @apply h-screen flex flex-col overflow-hidden;
   }
 
   ::selection {

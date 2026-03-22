@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Terminal, Hash, Pin, X, Wifi, WifiOff, CheckCircle } from "lucide-react";
+import { Send, Terminal, Hash, Pin, X, Wifi, WifiOff, CheckCircle, ChevronDown, ChevronUp } from "lucide-react";
 import type { ContextItem } from "../sidebar/context-card";
 import { QuoteCard } from "./quote-card";
 import { PositionCard } from "./position-card";
@@ -53,6 +53,32 @@ const ActionCard: React.FC<{ action: { type: string; success: boolean; detail: s
   </div>
 );
 
+const COLLAPSE_THRESHOLD = 400;
+
+const MessageContent: React.FC<{ content: string; streaming?: boolean }> = ({ content, streaming }) => {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = content.length > COLLAPSE_THRESHOLD;
+  const displayed = isLong && !expanded ? content.slice(0, COLLAPSE_THRESHOLD) + "…" : content;
+
+  return (
+    <div>
+      <div className="whitespace-pre-wrap text-[13px]">
+        {displayed}
+        {streaming && <span className="inline-block w-1.5 h-3 bg-tactical-accent ml-0.5 animate-pulse" />}
+      </div>
+      {isLong && !streaming && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="flex items-center gap-1 mt-1.5 text-[9px] uppercase tracking-wider text-tactical-dim hover:text-tactical-accent transition-colors"
+        >
+          {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+};
+
 export const ChatWindow: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -67,7 +93,19 @@ export const ChatWindow: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     openClawClient.connect()
-      .then(() => { if (!cancelled) { setIsConnected(true); setIsConnecting(false); } })
+      .then(async () => {
+        if (cancelled) return;
+        setIsConnected(true);
+        setIsConnecting(false);
+        const history = await openClawClient.history();
+        if (!cancelled && history.length > 0) {
+          setMessages(history.map((m, i) => ({
+            id: `history-${i}`,
+            role: m.role,
+            content: m.content,
+          })));
+        }
+      })
       .catch(() => { if (!cancelled) setIsConnecting(false); });
     return () => { cancelled = true; };
   }, []);
@@ -222,12 +260,7 @@ export const ChatWindow: React.FC = () => {
                       </div>
                     )}
 
-                    <div className="whitespace-pre-wrap text-[13px]">
-                      {msg.content}
-                      {msg.streaming && (
-                        <span className="inline-block w-1.5 h-3 bg-tactical-accent ml-0.5 animate-pulse" />
-                      )}
-                    </div>
+                    <MessageContent content={msg.content} streaming={msg.streaming} />
 
                     {!msg.streaming && msg.card?.type === "quote" && (
                       <QuoteCard

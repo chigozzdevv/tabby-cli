@@ -21,21 +21,23 @@ This skill is the borrower/operator runtime for Tabby's Plasma vault protocol.
 
 ## Commands
 
+All commands must be run as: `cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js <command>`
+
 ```bash
-npx tabby-borrower init-wallet
-npx tabby-borrower market
-npx tabby-borrower quote-borrow --collateral 0xASSET:1.25 --desired-borrow 500
-npx tabby-borrower open-vault
-npx tabby-borrower approve-collateral --asset 0xASSET --amount 1.25
-npx tabby-borrower deposit-collateral --vault-id 1 --asset 0xASSET --amount 1.25
-npx tabby-borrower borrow --vault-id 1 --amount 500
-npx tabby-borrower repay --vault-id 1 --amount all
-npx tabby-borrower withdraw-collateral --vault-id 1 --asset 0xASSET --amount all
-npx tabby-borrower vault-status --vault-id 1
-npx tabby-borrower monitor-vaults --quiet-ok
-npx tabby-borrower liquidate --vault-id 1 --amount 100 --asset 0xASSET
-npx tabby-borrower prepare-bind-operator --vault-id 1
-npx tabby-borrower confirm-bind-operator --vault-id 1
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js init-wallet
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js market
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js quote-borrow --collateral 0xASSET:1.25 --desired-borrow 500
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js open-vault
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js approve-collateral --asset 0xASSET --amount 1.25
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js deposit-collateral --vault-id 1 --asset 0xASSET --amount 1.25
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js borrow --vault-id 1 --amount 500
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js repay --vault-id 1 --amount all
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js withdraw-collateral --vault-id 1 --asset 0xASSET --amount all
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js vault-status --vault-id 1
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js monitor-vaults --quiet-ok
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js liquidate --vault-id 1 --amount 100 --asset 0xASSET
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js prepare-bind-operator --vault-id 1
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js confirm-bind-operator --vault-id 1
 ```
 
 ## Operator Model
@@ -55,7 +57,7 @@ Use OpenClaw cron for periodic monitoring:
       {
         id: "tabby-vault-monitor",
         schedule: "*/5 * * * *",
-        command: "cd /app/skills && npx tabby-borrower monitor-vaults --quiet-ok",
+        command: "cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js monitor-vaults --quiet-ok",
         enabled: true
       }
     ]

@@ -15,12 +15,16 @@ This skill is the LP runtime for Tabby's Plasma protocol. It allows agents and u
 
 ## Commands
 
+All commands must be run as: `cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js <command>`
+
 ```bash
-npx tabby-lp init-wallet
-npx tabby-lp pool-status
-npx tabby-lp deposit-liquidity --amount 100
-npx tabby-lp withdraw-liquidity --all
-npx tabby-lp monitor-pool
+cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js init-wallet
+cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js pool-status
+cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js position
+cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js approve-asset --amount 100
+cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js deposit-liquidity --amount 100
+cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js withdraw-liquidity --all
+cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js monitor-pool
 ```
 
 ## Agent LP Model
@@ -35,7 +39,7 @@ npx tabby-lp monitor-pool
       {
         id: "tabby-lp-monitor",
         schedule: "0 * * * *",
-        command: "cd /app/skills && npx tabby-lp monitor-pool",
+        command: "cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js monitor-pool",
         enabled: true
       }
     ]

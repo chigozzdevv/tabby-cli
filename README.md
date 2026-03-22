@@ -1,96 +1,131 @@
 # Tabby
 
-Tabby is an overcollateralized `USDT0` credit rail on Plasma for humans and OpenClaw agents.
+Tabby is a permissionless, overcollateralized USDT0 lending protocol on Plasma for borrowers, LPs, and autonomous agents.
 
-Borrowers open reusable vaults, lock supported collateral, and borrow `USDT0`. Liquidity providers supply `USDT0` to the pool and earn yield from borrower interest. Agent wallets can operate human-owned vaults through explicit onchain operator permissions.
+Borrowers open reusable vaults, lock supported collateral, and borrow `USDT0`. Liquidity providers supply `USDT0` to `DebtPool` and earn yield through pool shares. Agents can either borrow from their own vaults or operate human-owned vaults through explicit onchain permissions.
 
-## What it does
+## Overview
 
-- Borrow `USDT0` against approved collateral.
-- Bind agent wallets to human-owned vaults as vault operators.
-- Supply `USDT0` to the lending pool and earn native pool yield.
-- Monitor vault health, borrowing capacity, and protocol activity through the server and skill.
+Tabby has a single debt asset, a single liquidity pool, and reusable borrower vaults.
 
-## Repository layout
+- Borrowers open vaults, deposit supported collateral, and borrow `USDT0`
+- LPs deposit `USDT0` into `DebtPool` and receive pool shares that accrue value as borrower interest is paid
+- Agents can borrow from agent-owned vaults or operate human-owned vaults after the owner binds them as an operator
+- The offchain stack adds monitoring, quoting, activity indexing, and assistant workflows on top of the contracts
 
-- `contracts/` core protocol contracts: `DebtPool`, `VaultManager`, `MarketConfig`, `ChainlinkPriceOracle`, `Treasury`, and deployment scripts.
-- `server/` Fastify API for public config, market/vault monitoring, activity indexing, liquidity snapshots, and assistant-style quote/binding flows.
-- `skills/` OpenClaw skills, including `skills/tabby-borrower/` for wallet, vault, and operator workflows.
-- `client/` web app for landing, LP access, and operator/borrower UX.
+## Who Tabby Is For
 
-## Integrations
+### Human borrowers
 
-- Plasma for settlement and execution.
-- `USDT0` as the single debt and LP asset.
-- `WETH`, `XAUt0`, `wstETH`, and `WXPL` as the current live collateral set.
-- Chainlink for oracle pricing and stale-feed protection.
-- OpenClaw for agent skill execution and recurring monitoring.
-- Fastify + MongoDB for the API and indexed activity layer.
-- Foundry for Solidity build, test, and deployment.
+Use the web app to:
 
-## Architecture
+- connect a wallet
+- inspect vault and LP positions
+- monitor live protocol activity
+- chat with Tabby through OpenClaw
+- execute supported borrower and LP workflows through the chat runtime
+- manage vault risk over time
+
+### Autonomous agents
+
+Use the Tabby skills to:
+
+- create or load a local agent wallet
+- read live market parameters
+- quote borrow capacity
+- open and manage agent-owned vaults
+- borrow, repay, and manage collateral and loan health
+- bind to a human-owned vault and act as its operator
+
+### Liquidity providers
+
+Use the pool APIs or LP skill to:
+
+- inspect pool state
+- deposit `USDT0`
+- monitor yield and utilization
+- withdraw liquidity when desired
+
+## How The System Works
 
 ### Onchain
 
 - `DebtPool`
-  - single `USDT0` pool for LP deposits and borrower liquidity.
-  - LP shares accrue value as interest is paid.
+  - Single `USDT0` pool for LP liquidity and borrower debt
+  - LP shares accrue value as borrowers pay interest
 - `VaultManager`
-  - reusable borrower vaults.
-  - collateral deposit, borrow, repay, withdraw, liquidation, and operator binding.
+  - Creates and manages reusable borrower vaults
+  - Handles collateral deposits, borrowing, repayments, withdrawals, liquidations, and operator bindings
 - `MarketConfig`
-  - collateral parameters, debt caps, rate model, pause flags, and market-level controls.
+  - Stores collateral risk parameters, caps, pause flags, and rate model config
 - `ChainlinkPriceOracle`
-  - feed mapping and alias support for approved assets.
-- Governance stack
-  - timelock governance.
-  - treasury, emergency, and risk roles.
+  - Resolves price feeds for supported assets
+- Governance / treasury layer
+  - Timelock, treasury, and privileged risk roles
 
 ### Offchain
 
 - `server/`
-  - public protocol config.
-  - market and vault monitoring.
-  - pool snapshots and LP position reads.
-  - activity indexing for deposits, borrows, repayments, liquidations, and operator updates.
-  - assistant endpoints for preflight borrow quotes and operator-binding preparation.
-- `skills/tabby-borrower/`
-  - local wallet creation.
-  - vault operations.
-  - operator binding flows.
-  - health monitoring and notifications.
+  - Fastify API
+  - protocol config and market reads
+  - vault and LP monitoring
+  - activity indexing into MongoDB
+  - assistant endpoints for quote and operator-binding flows
+- `client/`
+  - React/Vite web app
+  - human mode for dashboard + assistant UX
+  - agent mode for borrower/operator skill handoff and operational instructions
+- `skills/`
+  - `tabby-borrower` for agent borrower and operator workflows
+  - `tabby-lp` for liquidity workflows
+  - local wallet persistence and recurring monitoring
 
-## Core flows
+## Main User Flows
 
-### Human borrower
+### Human borrower flow
 
-1. Connect or create a wallet.
-2. Quote borrowing power from intended collateral.
-3. Open a vault.
-4. Deposit collateral.
-5. Optionally bind an agent wallet as operator.
-6. Borrow `USDT0`.
-7. Monitor health factor and repay or top up collateral as needed.
+1. Create or connect a wallet
+2. Choose collateral
+3. Quote borrowing power
+4. Open a vault
+5. Deposit collateral
+6. Borrow `USDT0`
+7. Monitor health factor and repay or top up when needed
 
-### Agent borrower
+### Agent borrower / operator flow
 
-1. Initialize the `tabby-borrower` skill wallet.
-2. Read live market config and quote borrow capacity.
-3. Open a vault owned by the skill wallet, or bind the skill wallet to a human-owned vault.
-4. Deposit collateral and borrow `USDT0`.
-5. Monitor vault health and execute repay / collateral-management actions.
+1. Initialize a Tabby skill wallet
+2. Read market config and quote capacity
+3. Either open and fund an agent-owned vault or bind to a human-owned vault
+4. Borrow, repay, manage collateral, and monitor loan health
+5. For delegated vaults, act within the owner's permissions
 
-### Liquidity provider
+### LP flow
 
-1. Deposit `USDT0` into `DebtPool`.
-2. Receive internal pool shares.
-3. Earn lending yield as borrower interest accrues.
-4. Withdraw `USDT0` by burning shares, subject to available liquidity.
+1. Deposit `USDT0` into `DebtPool`
+2. Receive pool shares
+3. Earn yield as borrowers pay interest
+4. Withdraw by redeeming shares, subject to pool liquidity
 
-## Monitoring and API surface
+## Repository Map
 
-Public endpoints:
+| Path | Purpose |
+| --- | --- |
+| `contracts/` | Solidity contracts, tests, and deployment scripts |
+| `server/` | Fastify API, websocket server, activity sync, assistant routes |
+| `client/` | React frontend for human and agent entry points |
+| `skills/` | CLI skills for agent borrowers, operators, and LPs |
 
+## Supported Assets
+
+- Debt / LP asset: `USDT0`
+- Current collateral set: `WETH`, `XAUt0`, `wstETH`, `WXPL`
+
+## API Surface
+
+### Public routes
+
+- `GET /health`
 - `GET /public/config`
 - `GET /public/monitoring/market`
 - `GET /public/monitoring/vaults?owner=:address`
@@ -101,7 +136,7 @@ Public endpoints:
 - `GET /liquidity/quote/deposit?assetsWei=:wei`
 - `GET /liquidity/quote/withdraw?shares=:shares`
 
-Assistant endpoints:
+### Assistant routes
 
 - `POST /assistant/sessions`
 - `GET /assistant/sessions/:sessionId`
@@ -111,12 +146,158 @@ Assistant endpoints:
 - `POST /assistant/bindings/prepare`
 - `POST /assistant/bindings/confirm`
 
-## Deployment
+### Auth note
 
-Current live deployment is on Plasma mainnet.
+The public routes above can be called without auth.
 
+For local development or protected environments, authenticated routes can be gated with a dev token. Send:
+
+- `X-Dev-Auth: <your token>`
+
+Authenticated routes include `/monitoring/*`, `/activity`, and `/auth/me`.
+
+## Local Development
+
+### Prerequisites
+
+- Node.js 18+
+- npm
+- Foundry
+- MongoDB
+- Optional: a local OpenClaw gateway if you want the assistant UI to work end-to-end
+
+### 1. Start the server
+
+```bash
+cd server
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Minimum things to verify in `server/.env`:
+
+- `PORT`
+- `MONGODB_URI`
+- `MONGODB_DB`
+- `RPC_URL`
+- `CHAIN_ID`
+- protocol contract addresses
+- auth configuration: `DEV_AUTH_TOKEN` if you are protecting local routes
+
+### 2. Start the client
+
+```bash
+cd client
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Client envs:
+
+- `VITE_TABBY_API_BASE_URL=http://localhost:3000`
+- `VITE_OPENCLAW_GATEWAY_URL`
+- `VITE_OPENCLAW_TOKEN`
+
+For the websocket URL you have two workable local patterns:
+
+- direct gateway: `ws://localhost:18789`
+- through the Tabby server proxy: `ws://localhost:3000/gateway`
+
+If you do not have OpenClaw running locally, the dashboard can still load, but the assistant chat will stay offline.
+
+### 3. Run the contracts tests
+
+```bash
+cd contracts
+cp .env.example .env
+forge test
+```
+
+### 4. Build and use the skills
+
+```bash
+cd skills
+npm install
+npm run build
+```
+
+Create `skills/.env` with at least:
+
+```bash
+TABBY_API_BASE_URL=http://localhost:3000
+CHAIN_ID=9745
+RPC_URL=https://rpc.plasma.to
+VAULT_MANAGER_ADDRESS=0x...
+DEBT_POOL_ADDRESS=0x...
+MARKET_CONFIG_ADDRESS=0x...
+DEBT_ASSET_ADDRESS=0x...
+COLLATERAL_ASSETS=0x...,0x...,0x...,0x...
+```
+
+Borrower examples:
+
+```bash
+cd skills
+node dist/tabby-borrower/bin/tabby-borrower.js init-wallet
+node dist/tabby-borrower/bin/tabby-borrower.js market
+node dist/tabby-borrower/bin/tabby-borrower.js quote-borrow --collateral 0xASSET:1.25 --desired-borrow 500
+node dist/tabby-borrower/bin/tabby-borrower.js open-vault
+node dist/tabby-borrower/bin/tabby-borrower.js vault-status --vault-id 1
+```
+
+LP examples:
+
+```bash
+cd skills
+node dist/tabby-lp/bin/tabby-lp.js init-wallet
+node dist/tabby-lp/bin/tabby-lp.js pool-status
+node dist/tabby-lp/bin/tabby-lp.js deposit-liquidity --amount 100
+node dist/tabby-lp/bin/tabby-lp.js withdraw-liquidity --all
+```
+
+## WDK Usage
+
+Tabby skills use WDK for local agent wallet management on Plasma.
+
+- `@tetherto/wdk` is used for seed phrase generation and wallet bootstrapping
+- `@tetherto/wdk-wallet-evm` provides the Plasma EVM wallet integration layer
+- borrower and LP wallets are stored locally under `~/.config/tabby-borrower/` and `~/.config/tabby-lp/`
+- the skills derive wallet clients from the stored seed phrase and use them for protocol actions
+
+## First Smoke Test
+
+Once the server and client are running:
+
+1. Check server health:
+
+```bash
+curl http://localhost:3000/health
+```
+
+2. Check protocol config:
+
+```bash
+curl http://localhost:3000/public/config
+```
+
+3. Open the client and confirm:
+
+- the landing screen appears
+- human mode loads
+- server status shows online
+- wallet connection works
+- positions load for a wallet with existing vault or LP activity
+
+4. If OpenClaw is running, confirm the chat connects and can answer a simple protocol question.
+
+## Live Plasma Deployment
+
+Current network target:
+
+- Chain: Plasma mainnet
 - RPC: `https://rpc.plasma.to`
-- Public API: `http://localhost:3000` in local development
 
 ### Core contracts
 
@@ -131,88 +312,23 @@ Current live deployment is on Plasma mainnet.
 
 ### Assets
 
-- `USDT0` debt asset: `0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb`
-- `WETH` collateral: `0x9895D81bB462A195b4922ED7De0e3ACD007c32CB`
-- `XAUt0` collateral: `0x1B64B9025EEbb9A6239575dF9Ea4b9Ac46D4d193`
-- `wstETH` collateral: `0xe48D935e6C9e735463ccCf29a7F11e32bC09136E`
-- `WXPL` collateral: `0x6100E367285b01F48D07953803A2d8dCA5D19873`
+- `USDT0`: `0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb`
+- `WETH`: `0x9895D81bB462A195b4922ED7De0e3ACD007c32CB`
+- `XAUt0`: `0x1B64B9025EEbb9A6239575dF9Ea4b9Ac46D4d193`
+- `wstETH`: `0xe48D935e6C9e735463ccCf29a7F11e32bC09136E`
+- `WXPL`: `0x6100E367285b01F48D07953803A2d8dCA5D19873`
 
 ### Oracle feeds
 
 - `USDT0/USD`: `0x3205B49b3C8c5D593589e1e70567993f72C5F845`
 - `ETH/USD`: `0x43A7dd2125266c5c4c26EB86cd61241132426Fe7`
 - `XAUT/USD`: `0x354Df1ca4AE838A45405B3486ED0161AA7f01191`
-- `wstETH` priced via ETH/USD (aliased to WETH — conservative pricing)
+- `wstETH` priced via ETH/USD (aliased to WETH for conservative pricing)
 - `XPL/USD`: `0xF932477C37715aE6657Ab884414Bd9876FE3f750`
 
-## Requirements
+## Deploying Contracts
 
-- Node.js 18+
-- Foundry
-- MongoDB
-
-## Local development
-
-### Contracts
-
-```bash
-cd contracts
-forge test
-```
-
-### Server
-
-```bash
-cd server
-cp .env.example .env
-npm install
-npm run dev
-```
-
-### Borrower skill
-
-```bash
-cd skills/tabby-borrower
-npm install
-npm run build
-cp .env.example .env
-
-node dist/bin/tabby-borrower.js init-wallet
-node dist/bin/tabby-borrower.js market
-node dist/bin/tabby-borrower.js quote-borrow \
-  --collateral 0x9895D81bB462A195b4922ED7De0e3ACD007c32CB:1 \
-  --desired-borrow 500
-node dist/bin/tabby-borrower.js open-vault
-```
-
-For recurring monitoring, use the included OpenClaw cron job:
-
-```json
-{
-  "cron": {
-    "jobs": [
-      {
-        "id": "tabby-vault-monitor",
-        "schedule": "*/5 * * * *",
-        "command": "cd /path/to/skills/tabby-borrower && node dist/bin/tabby-borrower.js monitor-vaults --quiet-ok",
-        "enabled": true
-      }
-    ]
-  }
-}
-```
-
-### Client
-
-```bash
-cd client
-npm install
-npm run dev
-```
-
-## Deploying contracts
-
-Deploy script:
+Deployment script:
 
 - `contracts/script/DeployProtocol.s.sol`
 
@@ -221,7 +337,9 @@ Dry run:
 ```bash
 cd contracts
 forge script script/DeployProtocol.s.sol:DeployProtocol \
-  --rpc-url https://rpc.plasma.to --sig "run()" -vvv
+  --rpc-url https://rpc.plasma.to \
+  --sig "run()" \
+  -vvv
 ```
 
 Broadcast:
@@ -229,7 +347,9 @@ Broadcast:
 ```bash
 cd contracts
 forge script script/DeployProtocol.s.sol:DeployProtocol \
-  --rpc-url https://rpc.plasma.to --broadcast --sig "run()"
+  --rpc-url https://rpc.plasma.to \
+  --broadcast \
+  --sig "run()"
 ```
 
-Use `contracts/.env.example` as the source of truth for deployment configuration.
+Use `contracts/.env.example` as the deployment config reference.

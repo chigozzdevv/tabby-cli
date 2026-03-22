@@ -6,6 +6,11 @@ const DEVICE_KEY = "tabby:device:v1";
 
 export type ChunkHandler = (streamingText: string, done: boolean) => void;
 
+export type HistoryMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 function bytesToBase64(bytes: Uint8Array): string {
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);
@@ -150,6 +155,22 @@ class OpenClawClient {
 
       this.ws?.send(JSON.stringify({ type: "req", id, method, params }));
     });
+  }
+
+  async history(): Promise<HistoryMessage[]> {
+    if (!this.connected) return [];
+    try {
+      const res = await this.rpc("chat.history", { sessionKey: "main" });
+      const entries: any[] = res?.messages ?? res?.entries ?? [];
+      return entries
+        .filter((e: any) => e.role === "user" || e.role === "assistant")
+        .map((e: any) => ({
+          role: e.role,
+          content: typeof e.content === "string" ? e.content : e.content?.[0]?.text ?? "",
+        }));
+    } catch {
+      return [];
+    }
   }
 
   async send(text: string, onChunk: ChunkHandler): Promise<void> {
