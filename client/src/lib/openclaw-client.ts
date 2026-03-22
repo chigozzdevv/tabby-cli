@@ -25,7 +25,7 @@ async function getOrCreateDevice() {
   if (stored) {
     try {
       const { deviceId, publicKeyB64, privateKeyB64 } = JSON.parse(stored);
-      const privateKey = await crypto.subtle.importKey("pkcs8", base64ToBytes(privateKeyB64), ED25519, false, ["sign"]);
+      const privateKey = await crypto.subtle.importKey("pkcs8", base64ToBytes(privateKeyB64) as unknown as ArrayBuffer, ED25519, false, ["sign"]);
       return { deviceId, publicKeyB64, privateKey };
     } catch {}
   }
