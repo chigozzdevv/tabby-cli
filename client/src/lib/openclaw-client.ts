@@ -30,9 +30,11 @@ class OpenClawClient {
 
         if (frame.type === "event" && frame.event === "chat") {
           const { state, message } = frame.payload ?? {};
-          const chunk = message?.content?.[0]?.text ?? "";
+          const chunk = message?.content?.[0]?.text ?? message?.content ?? "";
           const done = state === "final" || state === "aborted" || state === "error";
-          this.chunkHandler?.(chunk, done);
+          if (chunk || done) {
+            this.chunkHandler?.(typeof chunk === "string" ? chunk : JSON.stringify(chunk), done);
+          }
           if (done) this.chunkHandler = null;
         }
       };
@@ -48,12 +50,12 @@ class OpenClawClient {
             client: { id: "webchat-ui", displayName: "Tabby Web", mode: "webchat", version: "1.0.0", platform: "web" },
             auth: { token: GATEWAY_TOKEN },
             role: "operator",
-            scopes: ["operator.read", "operator.write", "operator.admin"],
+            scopes: ["operator.read", "operator.write", "operator.admin", "operator.approvals", "operator.pairing"],
             caps: ["tool-events"],
             locale: navigator.language,
             userAgent: navigator.userAgent,
           });
-          await this.rpc("sessions.messages.subscribe", { key: "main" });
+          await this.rpc("sessions.messages.subscribe", { key: "main" }).catch(() => {});
           this._connected = true;
           resolve();
         } catch (err) {
@@ -116,8 +118,6 @@ export type TabbyResponse = {
   action: any;
 };
 
-// Extract the text field value from a partial or complete JSON string while streaming.
-// Lets us show the text progressively before the full JSON is ready.
 export function extractStreamingText(partial: string): string {
   const match = partial.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
   if (!match) return "";
@@ -128,8 +128,6 @@ export function extractStreamingText(partial: string): string {
   }
 }
 
-// Parse the complete JSON response from the LLM.
-// Returns the structured response or falls back gracefully.
 export function parseResponse(raw: string): { text: string; card: TabbyCard | null } {
   let parsed: Partial<TabbyResponse> | null = null;
 
