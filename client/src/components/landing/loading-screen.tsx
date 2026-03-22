@@ -78,22 +78,24 @@ const BOOT_STEPS: BootStep[] = [
   {
     label: "wallet",
     run: async () => {
-      try {
-        const res = await fetch(`${API_BASE}/health`);
-        const ok = res.ok;
-        if (ok) {
-          return [
-            { text: "tabby@kernel:~$ npx tabby-borrower check-wallet", color: "green" },
-            { text: "  └─ wallet: LOADED", color: "dim" },
-          ];
-        }
-        throw new Error();
-      } catch {
+      const ethereum = (window as any).ethereum;
+      if (!ethereum) {
         return [
-          { text: "tabby@kernel:~$ npx tabby-borrower check-wallet", color: "green" },
-          { text: "  └─ wallet: unavailable", color: "warn" },
+          { text: "Detecting wallet" },
+          { text: "  └─ no wallet extension found", color: "warn" },
         ];
       }
+      const accounts: string[] = await ethereum.request({ method: "eth_accounts" });
+      if (accounts[0]) {
+        return [
+          { text: "Detecting wallet" },
+          { text: `  └─ ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)} detected`, color: "dim" },
+        ];
+      }
+      return [
+        { text: "Detecting wallet" },
+        { text: "  └─ wallet found, not connected", color: "dim" },
+      ];
     },
   },
   {
