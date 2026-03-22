@@ -89,17 +89,6 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T | nul
   }
 }
 
-export async function getQuote(
-  collaterals: { asset: string; amountWei: string }[],
-  desiredBorrowWei?: string,
-  owner?: string
-): Promise<QuoteData | null> {
-  return apiFetch<QuoteData>("/assistant/quotes/preflight", {
-    method: "POST",
-    body: JSON.stringify({ collaterals, desiredBorrowWei, owner }),
-  });
-}
-
 export async function getVault(vaultId: number): Promise<VaultPosition | null> {
   return apiFetch<VaultPosition>(`/public/monitoring/vaults/${vaultId}`);
 }

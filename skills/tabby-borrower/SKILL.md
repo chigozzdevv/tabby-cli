@@ -6,15 +6,12 @@ metadata: {"openclaw":{"always":true}}
 
 # Tabby Borrower
 
-This skill is the borrower/operator runtime for Tabby’s Plasma vault protocol.
+This skill is the borrower/operator runtime for Tabby's Plasma vault protocol.
 
-Model:
-
-- borrower or agent creates a local wallet
 - vaults live in `VaultManager`
 - debt is borrowed from `DebtPool`
 - debt asset is `USDT0`
-- collateral is configured by the live market
+- collateral assets: `WETH`, `XAUt0`, `wstETH`, `WXPL`
 - an agent wallet can be bound as a vault operator for a human-owned vault
 
 ## Local wallet persistence
@@ -25,64 +22,29 @@ Model:
 ## Commands
 
 ```bash
-cd {baseDir}
-npm install
-npm run build
-cp .env.example .env
-
-# Create the skill wallet
 npx tabby-borrower init-wallet
-
-# Read live market config
 npx tabby-borrower market
-
-# Quote borrowing power from intended collateral
-npx tabby-borrower quote-borrow \
-  --collateral 0xASSET:1.25 \
-  --desired-borrow 500
-
-# Open a vault owned by the skill wallet
+npx tabby-borrower quote-borrow --collateral 0xASSET:1.25 --desired-borrow 500
 npx tabby-borrower open-vault
-
-# Approve and deposit collateral
 npx tabby-borrower approve-collateral --asset 0xASSET --amount 1.25
 npx tabby-borrower deposit-collateral --vault-id 1 --asset 0xASSET --amount 1.25
-
-# Borrow / repay / withdraw
 npx tabby-borrower borrow --vault-id 1 --amount 500
 npx tabby-borrower repay --vault-id 1 --amount all
 npx tabby-borrower withdraw-collateral --vault-id 1 --asset 0xASSET --amount all
-
-# Inspect and monitor vaults
 npx tabby-borrower vault-status --vault-id 1
 npx tabby-borrower monitor-vaults --quiet-ok
 npx tabby-borrower liquidate --vault-id 1 --amount 100 --asset 0xASSET
-
-# Prepare operator binding for a human-owned vault
 npx tabby-borrower prepare-bind-operator --vault-id 1
 npx tabby-borrower confirm-bind-operator --vault-id 1
 ```
 
 ## Operator Model
 
-For human-owned vaults:
+For human-owned vaults the human wallet owns the vault, the skill wallet is bound as operator through `setVaultOperator(...)`, the human signs the binding transaction, and after binding the skill can manage the vault.
 
-- the human wallet owns the vault
-- the skill wallet is bound as operator through `setVaultOperator(...)`
-- the human signs the binding transaction
-- after binding, the skill can manage the vault within contract limits
-
-For agent-owned vaults:
-
-- the skill wallet itself opens and owns the vault
+For agent-owned vaults the skill wallet itself opens and owns the vault.
 
 ## Monitoring
-
-`monitor-vaults` checks tracked vaults and warns on:
-
-- low health factor
-- critical health factor
-- low XPL gas balance
 
 Use OpenClaw cron for periodic monitoring:
 
@@ -101,4 +63,90 @@ Use OpenClaw cron for periodic monitoring:
 }
 ```
 
-Set `TABBY_NOTIFICATION_TARGET` if you want OpenClaw message alerts.
+## Response Format
+
+**Always respond in this exact JSON shape. No exceptions.**
+
+```json
+{
+  "text": "Your natural language response here",
+  "isQuote": false,
+  "isPosition": false,
+  "isPool": false,
+  "isAction": false,
+  "quote": null,
+  "position": null,
+  "pool": null,
+  "action": null
+}
+```
+
+Field rules:
+- `text` — always present, your full conversational response
+- At most one of `isQuote`, `isPosition`, `isPool`, `isAction` is `true` at a time
+- When a flag is `true`, populate the matching field with the raw JSON output from the command; set all others to `null`
+- `action` shape: `{ "type": "borrow" | "repay" | "deposit" | "withdraw" | "open-vault", "success": true, "detail": "..." }`
+
+**When to set isQuote = true** — user asks about borrowing capacity, LTV, how much they can borrow, what a collateral amount gets them:
+
+```json
+{
+  "text": "With 2 WETH as collateral you can borrow up to 4,521 USDT0 at 70% LTV.",
+  "isQuote": true,
+  "isPosition": false,
+  "isPool": false,
+  "isAction": false,
+  "quote": { ...raw JSON from quote-borrow command... },
+  "position": null,
+  "pool": null,
+  "action": null
+}
+```
+
+**When to set isPosition = true** — user asks about their vault, health factor, debt, collateral balance, position status:
+
+```json
+{
+  "text": "Your vault #3 is healthy with a health factor of 1.87.",
+  "isQuote": false,
+  "isPosition": true,
+  "isPool": false,
+  "isAction": false,
+  "quote": null,
+  "position": { ...raw JSON from vault-status command... },
+  "pool": null,
+  "action": null
+}
+```
+
+**When to set isAction = true** — you just executed a borrow, repay, deposit, withdraw, or vault open:
+
+```json
+{
+  "text": "Done. Borrowed 500 USDT0 into vault #3. Health factor is now 1.62.",
+  "isQuote": false,
+  "isPosition": false,
+  "isPool": false,
+  "isAction": true,
+  "quote": null,
+  "position": null,
+  "pool": null,
+  "action": { "type": "borrow", "success": true, "detail": "500 USDT0 borrowed, vault #3, HF 1.62" }
+}
+```
+
+**When all flags are false** — general questions, explanations, errors, protocol info:
+
+```json
+{
+  "text": "Tabby is an overcollateralized lending protocol on Plasma. You deposit collateral and borrow USDT0 against it.",
+  "isQuote": false,
+  "isPosition": false,
+  "isPool": false,
+  "isAction": false,
+  "quote": null,
+  "position": null,
+  "pool": null,
+  "action": null
+}
+```

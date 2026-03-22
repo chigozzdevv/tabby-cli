@@ -215,11 +215,14 @@ export const LoadingScreen: React.FC<{ onComplete: () => void }> = ({ onComplete
       className="fixed inset-0 z-[1000] flex flex-col items-center justify-center bg-[#0c0c0c] p-8"
     >
       <div className="w-full max-w-2xl">
-        <div className="mb-6 text-center">
-          <div className="text-3xl font-black tracking-[0.2em] uppercase text-[#e0e0d0]">
-            TABBY
+        <div className="mb-6 flex flex-col items-center text-center">
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            <img src="/favicon.svg" alt="Tabby Logo" className="w-10 h-10" />
+            <div className="text-3xl font-black tracking-[0.2em] uppercase text-tactical-accent leading-none">
+              TABBY
+            </div>
           </div>
-          <div className="text-[10px] tracking-[0.4em] uppercase text-[#777] mt-1">
+          <div className="text-[10px] tracking-[0.4em] uppercase text-[#777]">
             Liquidity Rail
           </div>
         </div>

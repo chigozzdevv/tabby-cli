@@ -3,16 +3,16 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { randomUUID } from "node:crypto";
-import { 
-  createWalletClient, 
-  http, 
-  formatUnits, 
-  parseUnits, 
-  decodeEventLog, 
-  maxUint256 
+import {
+  http,
+  formatUnits,
+  parseUnits,
+  decodeEventLog,
+  maxUint256
 } from "viem";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { mnemonicToAccount } from "viem/accounts";
+import { generateSeedPhrase, walletStoreFromSeedPhrase, createViemWalletClient } from "../../lib/wdk-wallet.js";
+import type { WDKWalletStore } from "../../lib/wdk-wallet.js";
 import { getEnv } from "../../lib/env.js";
 import { 
   vaultManagerAbi, 
@@ -211,13 +211,13 @@ async function ensureDir(dir: string) {
   await fs.mkdir(dir, { recursive: true });
 }
 
-async function loadWallet() {
+async function loadWallet(): Promise<WDKWalletStore> {
   const p = await walletPath();
   const raw = await fs.readFile(p, "utf8");
-  return JSON.parse(raw) as { address: `0x${string}`; privateKey: `0x${string}` };
+  return JSON.parse(raw) as WDKWalletStore;
 }
 
-async function tryLoadWallet() {
+async function tryLoadWallet(): Promise<WDKWalletStore | undefined> {
   try {
     return await loadWallet();
   } catch {
@@ -225,17 +225,17 @@ async function tryLoadWallet() {
   }
 }
 
-async function saveWallet(privateKey: `0x${string}`) {
-  const account = privateKeyToAccount(privateKey);
+async function saveWallet(seedPhrase: string) {
+  const store = walletStoreFromSeedPhrase(seedPhrase);
   const p = await walletPath();
   await ensureDir(path.dirname(p));
-  await fs.writeFile(p, JSON.stringify({ address: account.address, privateKey }, null, 2), { mode: 0o600 });
-  return { address: account.address as `0x${string}`, path: p };
+  await fs.writeFile(p, JSON.stringify(store, null, 2), { mode: 0o600 });
+  return { address: store.address, path: p };
 }
 
 async function loadBorrowerAccount() {
   const wallet = await loadWallet();
-  const account = privateKeyToAccount(wallet.privateKey);
+  const account = mnemonicToAccount(wallet.seedPhrase);
   return { wallet, account };
 }
 
@@ -458,7 +458,7 @@ async function fetchVaultSummary(protocol: ProtocolConfig, vaultId: number): Pro
     borrowCapacityUsd: borrowCapacityUsd.toString(),
     liquidationCapacityUsd: liquidationCapacityUsd.toString(),
     maxAdditionalBorrowUsd: (BigInt(borrowCapacityUsd) - BigInt(debtValueUsd) > 0n ? BigInt(borrowCapacityUsd) - BigInt(debtValueUsd) : 0n).toString(),
-    maxAdditionalBorrowWei: "0", // simplistic for fallback
+    maxAdditionalBorrowWei: "0",
     currentBorrowRateBps: Number(currentBorrowRateBps),
     healthFactorE18: healthFactorE18.toString(),
     collaterals: collaterals.filter((item) => item.balanceWei !== "0"),
@@ -620,8 +620,8 @@ async function sendNotification(message: string) {
 }
 
 async function commandInitWallet() {
-  const account = generatePrivateKey();
-  const { address, path } = await saveWallet(account);
+  const seedPhrase = generateSeedPhrase();
+  const { address, path } = await saveWallet(seedPhrase);
   printJson({ address, path, ok: true });
 }
 
@@ -648,9 +648,9 @@ async function commandQuoteBorrow() {
 
 async function commandOpenVault() {
   const protocol = await resolveProtocolConfig();
-  const { account } = await loadBorrowerAccount();
+  const { wallet, account } = await loadBorrowerAccount();
   const { chain, publicClient } = createClients(protocol);
-  const walletClient = createWalletClient({ account, chain, transport: http(protocol.rpcUrl) }) as any;
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
 
   const hash = await walletClient.writeContract({
     address: protocol.vaultManager,
@@ -691,7 +691,7 @@ async function commandApproveCollateral() {
   const amount = parseAmountToWei({ amount: getArg("--amount"), amountWei: getArg("--amount-wei"), decimals, label: "approval" });
 
   const { chain, publicClient } = createClients(protocol);
-  const walletClient = createWalletClient({ account, chain, transport: http(protocol.rpcUrl) }) as any;
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
 
   const result = await ensureAllowance({ publicClient, walletClient, token: asset, owner: wallet.address as `0x${string}`, spender: protocol.vaultManager, requiredAmount: amount });
   printJson({ ok: true, txHash: result.hash, asset, spender: protocol.vaultManager });
@@ -702,12 +702,12 @@ async function commandDepositCollateral() {
   const market = await fetchMarketOverview(protocol);
   const asset = asAddress(getArg("--asset"), "asset") ?? (await resolveDefaultCollateralAsset(protocol, market));
   const vaultId = Number(requireArg("--vault-id"));
-  const { account } = await loadBorrowerAccount();
+  const { wallet, account } = await loadBorrowerAccount();
   const decimals = await loadTokenDecimals(protocol, asset);
   const amount = parseAmountToWei({ amount: getArg("--amount"), amountWei: getArg("--amount-wei"), decimals, label: "collateral" });
 
   const { chain, publicClient } = createClients(protocol);
-  const walletClient = createWalletClient({ account, chain, transport: http(protocol.rpcUrl) }) as any;
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
   
   await ensureAllowance({ publicClient, walletClient, token: asset, owner: account.address, spender: protocol.vaultManager, requiredAmount: amount });
 
@@ -725,13 +725,13 @@ async function commandDepositCollateral() {
 async function commandBorrow() {
   const protocol = await resolveProtocolConfig();
   const vaultId = Number(requireArg("--vault-id"));
-  const { account } = await loadBorrowerAccount();
+  const { wallet, account } = await loadBorrowerAccount();
   const market = await fetchMarketOverview(protocol);
   const amount = parseAmountToWei({ amount: getArg("--amount"), amountWei: getArg("--amount-wei"), decimals: market.debtAsset.decimals, label: "borrow" });
-  const receiver = asAddress(getArg("--receiver"), "receiver") ?? (await loadWallet()).address;
+  const receiver = asAddress(getArg("--receiver"), "receiver") ?? wallet.address;
 
   const { chain, publicClient } = createClients(protocol);
-  const walletClient = createWalletClient({ account, chain, transport: http(protocol.rpcUrl) }) as any;
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
   const hash = await walletClient.writeContract({
     address: protocol.vaultManager,
     abi: vaultManagerAbi,
@@ -754,7 +754,7 @@ async function commandRepay() {
     : parseAmountToWei({ amount: amountArg, amountWei: getArg("--amount-wei"), decimals: market.debtAsset.decimals, label: "repay" });
 
   const { chain, publicClient } = createClients(protocol);
-  const walletClient = createWalletClient({ account, chain, transport: http(protocol.rpcUrl) }) as any;
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
 
   await ensureAllowance({ publicClient, walletClient, token: protocol.debtAsset, owner: wallet.address as `0x${string}`, spender: protocol.vaultManager, requiredAmount: amount });
 
@@ -773,7 +773,7 @@ async function commandWithdrawCollateral() {
   const market = await fetchMarketOverview(protocol);
   const asset = asAddress(getArg("--asset"), "asset") ?? (await resolveDefaultCollateralAsset(protocol, market));
   const vaultId = Number(requireArg("--vault-id"));
-  const { account } = await loadBorrowerAccount();
+  const { wallet, account } = await loadBorrowerAccount();
   const decimals = await loadTokenDecimals(protocol, asset);
   const amountArg = getArg("--amount");
   let amount: bigint;
@@ -785,10 +785,10 @@ async function commandWithdrawCollateral() {
   } else {
     amount = parseAmountToWei({ amount: amountArg, amountWei: getArg("--amount-wei"), decimals, label: "withdraw" });
   }
-  const receiver = asAddress(getArg("--to"), "receiver") ?? (await loadWallet()).address;
+  const receiver = asAddress(getArg("--to"), "receiver") ?? wallet.address;
 
   const { chain, publicClient } = createClients(protocol);
-  const walletClient = createWalletClient({ account, chain, transport: http(protocol.rpcUrl) }) as any;
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
   const hash = await walletClient.writeContract({
     address: protocol.vaultManager,
     abi: vaultManagerAbi,
@@ -804,12 +804,12 @@ async function commandLiquidate() {
   const vaultId = Number(requireArg("--vault-id"));
   const market = await fetchMarketOverview(protocol);
   const asset = asAddress(getArg("--asset"), "asset") ?? (await resolveDefaultCollateralAsset(protocol, market));
-  const { account } = await loadBorrowerAccount();
+  const { wallet, account } = await loadBorrowerAccount();
   const decimals = market.debtAsset.decimals;
   const amount = parseAmountToWei({ amount: getArg("--amount"), amountWei: getArg("--amount-wei"), decimals, label: "liquidation repay" });
 
   const { chain, publicClient } = createClients(protocol);
-  const walletClient = createWalletClient({ account, chain, transport: http(protocol.rpcUrl) }) as any;
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
 
   await ensureAllowance({ publicClient, walletClient, token: protocol.debtAsset, owner: account.address as `0x${string}`, spender: protocol.vaultManager, requiredAmount: amount });
 

@@ -65,7 +65,7 @@ function formatActivityTitle(data: any): string {
     case "collateral.deposited": return "COLLATERAL IN";
     case "collateral.withdrawn": return "COLLATERAL OUT";
     case "debt.borrowed": return "BORROW EXECUTED";
-    case "debt.repaid": return "DEBR REPAID";
+    case "debt.repaid": return "DEBT REPAID";
     case "vault.liquidated": return "LIQUIDATION ALERT";
     default: return data.type.toUpperCase().replace(".", " ");
   }

@@ -1,44 +1,76 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Terminal, Hash, Pin, X } from "lucide-react";
+import { Send, Terminal, Hash, Pin, X, Wifi, WifiOff, CheckCircle } from "lucide-react";
 import type { ContextItem } from "../sidebar/context-card";
 import { QuoteCard } from "./quote-card";
 import { PositionCard } from "./position-card";
-import { getQuote, listPositions } from "../../lib/api-client";
-import type { QuoteData, VaultPosition } from "../../lib/api-client";
-
-type CardPayload =
-  | { type: "quote"; data: QuoteData }
-  | { type: "position"; data: VaultPosition };
+import { openClawClient, extractStreamingText, parseResponse } from "../../lib/openclaw-client";
+import type { TabbyCard } from "../../lib/openclaw-client";
+import type { QuoteData, VaultPosition, PoolData } from "../../lib/api-client";
+import { formatBps, formatUsd } from "../../lib/api-client";
 
 export interface Message {
   id: string;
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant";
   content: string;
   context?: ContextItem[];
-  card?: CardPayload;
+  card?: TabbyCard;
+  streaming?: boolean;
 }
 
 const SUGGESTIONS = [
-  "What loan can my 200 BTC get me?",
-  "Show my positions",
-  "How does Tabby work?",
+  "What loan can my 2 WETH get me?",
+  "Show my vault positions",
+  "What is the current pool APY?",
 ];
 
-function parseIntent(text: string): "quote" | "position" | "general" {
-  const lower = text.toLowerCase();
-  if (/\b(borrow|loan|lend|collateral|ltv|what.*get|how much can i)\b/.test(lower)) return "quote";
-  if (/\b(position|vault|health|my vault|show.*position|status)\b/.test(lower)) return "position";
-  return "general";
-}
+const PoolCard: React.FC<{ pool: PoolData }> = ({ pool }) => (
+  <div className="border border-tactical-border bg-tactical-surface mt-2">
+    <div className="border-b border-tactical-border px-3 py-2 text-[10px] text-tactical-accent uppercase font-bold tracking-wider">
+      Pool Status
+    </div>
+    <div className="p-3 grid grid-cols-2 gap-x-6 gap-y-2 text-[11px]">
+      <div className="text-[#888]">Asset</div>
+      <div className="font-bold">{pool.assetSymbol}</div>
+      <div className="text-[#888]">TVL</div>
+      <div className="font-bold">{formatUsd(pool.totalAssetsWei, pool.assetDecimals)}</div>
+      <div className="text-[#888]">Available</div>
+      <div className="font-bold">{formatUsd(pool.availableLiquidityWei, pool.assetDecimals)}</div>
+      <div className="text-[#888]">Utilization</div>
+      <div className="font-bold">{formatBps(pool.utilizationBps)}</div>
+      <div className="text-[#888]">Borrow Rate</div>
+      <div className="font-bold">{formatBps(pool.currentBorrowRateBps)}</div>
+    </div>
+  </div>
+);
+
+const ActionCard: React.FC<{ action: { type: string; success: boolean; detail: string } }> = ({ action }) => (
+  <div className="border border-tactical-accent/30 bg-tactical-accent/5 mt-2 px-3 py-2 flex items-center gap-2 text-[11px]">
+    <CheckCircle size={12} className="text-tactical-accent shrink-0" />
+    <span className="font-bold uppercase text-tactical-accent">{action.type}</span>
+    <span className="text-tactical-dim">—</span>
+    <span>{action.detail}</span>
+  </div>
+);
 
 export const ChatWindow: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [pendingContext, setPendingContext] = useState<ContextItem[]>([]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [isThinking, setIsThinking] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const streamingIdRef = useRef<string | null>(null);
+  const accumulatedRef = useRef<string>("");
+
+  useEffect(() => {
+    let cancelled = false;
+    openClawClient.connect()
+      .then(() => { if (!cancelled) { setIsConnected(true); setIsConnecting(false); } })
+      .catch(() => { if (!cancelled) setIsConnecting(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -49,6 +81,11 @@ export const ChatWindow: React.FC = () => {
   const handleSend = async (text?: string) => {
     const msg = text || input;
     if (!msg.trim() && pendingContext.length === 0) return;
+    if (!isConnected) return;
+
+    const contextSuffix = pendingContext.length > 0
+      ? `\n\nContext: ${pendingContext.map(c => `${c.title} (${c.id})`).join(", ")}`
+      : "";
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -57,74 +94,52 @@ export const ChatWindow: React.FC = () => {
       context: pendingContext.length > 0 ? [...pendingContext] : undefined,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    const sentContext = [...pendingContext];
-    setPendingContext([]);
-    setIsThinking(true);
+    const assistantId = (Date.now() + 1).toString();
+    const assistantMessage: Message = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      streaming: true,
+    };
 
-    const intent = parseIntent(msg);
+    setMessages(prev => [...prev, userMessage, assistantMessage]);
+    setInput("");
+    setPendingContext([]);
+    streamingIdRef.current = assistantId;
+    accumulatedRef.current = "";
 
     try {
-      if (intent === "quote") {
-        const collateralAsset = sentContext.length > 0
-          ? sentContext[0].id
-          : "0x9895D81bB462A195b4922ED7De0e3ACD007c32CB";
+      await openClawClient.send(msg + contextSuffix, (chunk, done) => {
+        accumulatedRef.current += chunk;
 
-        const quote = await getQuote([{
-          asset: collateralAsset,
-          amountWei: "20000000000",
-        }]);
-
-        if (quote) {
-          const assistantMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            role: "assistant",
-            content: "Here's your borrow quote based on the collateral provided:",
-            card: { type: "quote", data: quote },
-          };
-          setMessages((prev) => [...prev, assistantMessage]);
+        if (!done) {
+          const streamText = extractStreamingText(accumulatedRef.current);
+          if (streamText) {
+            setMessages(prev => prev.map(m =>
+              m.id === assistantId ? { ...m, content: streamText } : m
+            ));
+          }
         } else {
-          setMessages((prev) => [...prev, {
-            id: (Date.now() + 1).toString(),
-            role: "assistant",
-            content: "Unable to generate quote — backend is offline. Please ensure the server is running.",
-          }]);
+          const { text, card } = parseResponse(accumulatedRef.current);
+          setMessages(prev => prev.map(m =>
+            m.id === assistantId
+              ? { ...m, content: text, card: card ?? undefined, streaming: false }
+              : m
+          ));
+          streamingIdRef.current = null;
         }
-      } else if (intent === "position") {
-        const ownerAddress = "0x5ee2796f3014b524A2C51521B48F830B8467E341";
-        const positions = await listPositions(ownerAddress);
-        if (positions.length > 0) {
-          const assistantMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            role: "assistant",
-            content: `Found ${positions.length} active position${positions.length > 1 ? "s" : ""}:`,
-            card: { type: "position", data: positions[0] },
-          };
-          setMessages((prev) => [...prev, assistantMessage]);
-        } else {
-          setMessages((prev) => [...prev, {
-            id: (Date.now() + 1).toString(),
-            role: "assistant",
-            content: "No active positions found. Open a vault to get started.",
-          }]);
-        }
-      } else {
-        setMessages((prev) => [...prev, {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: `Processing request for [${sentContext.map((c) => c.title).join(", ") || "GENERAL"}]... Tabby is a lending protocol on Plasma. You can borrow against collateral or provide liquidity to earn yield. Ask me about borrowing or check your positions.`,
-        }]);
-      }
+      });
     } catch {
-      setMessages((prev) => [...prev, {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "Unable to reach the protocol backend. Please check your connection and ensure the server is running.",
-      }]);
-    } finally {
-      setIsThinking(false);
+      setMessages(prev => prev.map(m =>
+        m.id === assistantId
+          ? { ...m, content: "Unable to reach OpenClaw gateway. Check that OpenClaw is running.", streaming: false }
+          : m
+      ));
     }
+  };
+
+  const handleCardAction = (action: string, detail: string) => {
+    handleSend(`${action} — ${detail}`);
   };
 
   const onInputDrop = (e: React.DragEvent) => {
@@ -133,8 +148,8 @@ export const ChatWindow: React.FC = () => {
     const data = e.dataTransfer.getData("application/tabby-context");
     if (data) {
       const item = JSON.parse(data) as ContextItem;
-      if (!pendingContext.find((c) => c.id === item.id)) {
-        setPendingContext((prev) => [...prev, item]);
+      if (!pendingContext.find(c => c.id === item.id)) {
+        setPendingContext(prev => [...prev, item]);
       }
     }
   };
@@ -144,22 +159,36 @@ export const ChatWindow: React.FC = () => {
   return (
     <div
       className="panel flex h-full flex-col relative"
-      onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }}
-      onDragLeave={(e) => { if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) setIsDraggingOver(false); }}
+      onDragOver={e => { e.preventDefault(); setIsDraggingOver(true); }}
+      onDragLeave={e => { if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) setIsDraggingOver(false); }}
       onDrop={onInputDrop}
     >
+      <div className="border-b border-tactical-border px-4 py-2 flex items-center justify-between">
+        <span className="text-[9px] uppercase tracking-widest text-tactical-dim font-bold">AI Assistant</span>
+        <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-wider">
+          {isConnecting ? (
+            <span className="text-tactical-dim">connecting...</span>
+          ) : isConnected ? (
+            <><Wifi size={9} className="text-tactical-accent" /><span className="text-tactical-accent">openclaw</span></>
+          ) : (
+            <><WifiOff size={9} className="text-tactical-error" /><span className="text-tactical-error">offline</span></>
+          )}
+        </div>
+      </div>
+
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-6">
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full">
             <p className="text-[13px] uppercase tracking-wider text-tactical-dim mb-8">
-              AI {">>"}  Ask Tabby all your queries
+              AI {">>"} Ask Tabby all your queries
             </p>
             <div className="flex flex-col gap-3 w-full max-w-md">
               {SUGGESTIONS.map((suggestion, i) => (
                 <button
                   key={i}
                   onClick={() => handleSend(suggestion)}
-                  className="suggestion-btn text-left flex items-center gap-3"
+                  disabled={!isConnected}
+                  className="suggestion-btn text-left flex items-center gap-3 disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <span className="text-tactical-dim">{i + 1}-/</span>
                   {suggestion}
@@ -170,7 +199,7 @@ export const ChatWindow: React.FC = () => {
         ) : (
           <div className="space-y-4">
             <AnimatePresence>
-              {messages.map((msg) => (
+              {messages.map(msg => (
                 <motion.div
                   key={msg.id}
                   initial={{ opacity: 0, y: 8 }}
@@ -182,42 +211,46 @@ export const ChatWindow: React.FC = () => {
                       {msg.role === "assistant" ? <Terminal size={10} /> : <Hash size={10} />}
                       {msg.role}
                     </div>
+
                     {msg.context && msg.context.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-2 pb-2 border-b border-tactical-border/50">
-                        {msg.context.map((c) => (
-                          <span
-                            key={c.id}
-                            className="inline-flex items-center gap-1 border border-tactical-accent/30 bg-tactical-accent/5 px-1.5 py-0.5 text-[9px] font-bold uppercase text-tactical-accent"
-                          >
-                            <Pin size={8} />
-                            {c.title}
+                        {msg.context.map(c => (
+                          <span key={c.id} className="inline-flex items-center gap-1 border border-tactical-accent/30 bg-tactical-accent/5 px-1.5 py-0.5 text-[9px] font-bold uppercase text-tactical-accent">
+                            <Pin size={8} />{c.title}
                           </span>
                         ))}
                       </div>
                     )}
-                    <div className="whitespace-pre-wrap text-[13px]">{msg.content}</div>
-                    {msg.card?.type === "quote" && <QuoteCard quote={msg.card.data} />}
-                    {msg.card?.type === "position" && <PositionCard vault={msg.card.data} />}
+
+                    <div className="whitespace-pre-wrap text-[13px]">
+                      {msg.content}
+                      {msg.streaming && (
+                        <span className="inline-block w-1.5 h-3 bg-tactical-accent ml-0.5 animate-pulse" />
+                      )}
+                    </div>
+
+                    {!msg.streaming && msg.card?.type === "quote" && (
+                      <QuoteCard
+                        quote={msg.card.data as QuoteData}
+                        onAccept={amountWei => handleCardAction("confirm borrow", `${amountWei} wei`)}
+                      />
+                    )}
+                    {!msg.streaming && msg.card?.type === "position" && (
+                      <PositionCard
+                        vault={msg.card.data as VaultPosition}
+                        onAction={(action, vaultId) => handleCardAction(action, `vault #${vaultId}`)}
+                      />
+                    )}
+                    {!msg.streaming && msg.card?.type === "pool" && (
+                      <PoolCard pool={msg.card.data as PoolData} />
+                    )}
+                    {!msg.streaming && msg.card?.type === "action" && (
+                      <ActionCard action={msg.card.data} />
+                    )}
                   </div>
                 </motion.div>
               ))}
             </AnimatePresence>
-
-            {isThinking && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start gap-3">
-                <div className="p-3 border border-tactical-accent/30 bg-tactical-accent/5">
-                  <div className="flex items-center gap-2 text-[9px] text-tactical-dim uppercase font-black">
-                    <Terminal size={10} />
-                    assistant
-                  </div>
-                  <div className="flex gap-1 mt-2">
-                    <span className="w-1.5 h-1.5 bg-tactical-accent rounded-full animate-pulse" />
-                    <span className="w-1.5 h-1.5 bg-tactical-accent rounded-full animate-pulse [animation-delay:150ms]" />
-                    <span className="w-1.5 h-1.5 bg-tactical-accent rounded-full animate-pulse [animation-delay:300ms]" />
-                  </div>
-                </div>
-              </motion.div>
-            )}
           </div>
         )}
       </div>
@@ -231,18 +264,10 @@ export const ChatWindow: React.FC = () => {
               exit={{ height: 0, opacity: 0 }}
               className="flex gap-1.5 flex-wrap mb-2"
             >
-              {pendingContext.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center gap-1 border border-tactical-accent/30 bg-tactical-accent/5 px-2 py-0.5 text-[9px] font-bold uppercase text-tactical-accent shrink-0"
-                >
-                  <Pin size={8} />
-                  {c.title}
-                  <X
-                    size={8}
-                    className="ml-0.5 cursor-pointer hover:text-tactical-error transition-colors"
-                    onClick={() => setPendingContext((prev) => prev.filter((item) => item.id !== c.id))}
-                  />
+              {pendingContext.map(c => (
+                <div key={c.id} className="flex items-center gap-1 border border-tactical-accent/30 bg-tactical-accent/5 px-2 py-0.5 text-[9px] font-bold uppercase text-tactical-accent shrink-0">
+                  <Pin size={8} />{c.title}
+                  <X size={8} className="ml-0.5 cursor-pointer hover:text-tactical-error transition-colors" onClick={() => setPendingContext(prev => prev.filter(item => item.id !== c.id))} />
                 </div>
               ))}
             </motion.div>
@@ -253,14 +278,20 @@ export const ChatWindow: React.FC = () => {
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder={isDraggingOver ? "Drop context here..." : "Type your message here..."}
-            className="flex-1 bg-transparent border-none p-2 text-sm font-mono focus:outline-none placeholder:text-tactical-dim/50 placeholder:uppercase"
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSend()}
+            disabled={!isConnected}
+            placeholder={
+              isConnecting ? "Connecting to OpenClaw..." :
+              !isConnected ? "OpenClaw offline — check gateway" :
+              isDraggingOver ? "Drop context here..." :
+              "Type your message..."
+            }
+            className="flex-1 bg-transparent border-none p-2 text-sm font-mono focus:outline-none placeholder:text-tactical-dim/50 placeholder:uppercase disabled:opacity-40"
           />
           <button
             onClick={() => handleSend()}
-            disabled={isThinking}
+            disabled={!isConnected || (!input.trim() && pendingContext.length === 0)}
             className="h-8 w-8 flex items-center justify-center border border-tactical-border rounded-full hover:border-tactical-accent hover:text-tactical-accent transition-colors disabled:opacity-30"
           >
             <Send size={14} />

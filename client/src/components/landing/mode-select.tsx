@@ -14,10 +14,13 @@ export const ModeSelect: React.FC<ModeSelectProps> = ({ onSelect }) => {
       exit={{ opacity: 0, transition: { duration: 0.3 } }}
       className="fixed inset-0 z-[1000] flex flex-col items-center justify-center bg-[#0c0c0c] p-8"
     >
-      <div className="w-full max-w-xl text-center">
-        <h1 className="text-4xl font-black tracking-[0.15em] uppercase text-[#e0e0d0] mb-2">
-          TABBY
-        </h1>
+      <div className="w-full max-w-xl flex flex-col items-center text-center">
+        <div className="flex items-center justify-center gap-1.5 mb-3">
+          <img src="/favicon.svg" alt="Tabby Logo" className="w-12 h-12" />
+          <h1 className="text-4xl font-black tracking-[0.15em] uppercase text-tactical-accent leading-none">
+            TABBY
+          </h1>
+        </div>
         <p className="text-[11px] tracking-[0.3em] uppercase text-[#444] mb-12">
           Liquidity Rail on OpenClaw
         </p>

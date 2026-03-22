@@ -22,7 +22,7 @@ Borrowers open reusable vaults, lock supported collateral, and borrow `USDT0`. L
 
 - Plasma for settlement and execution.
 - `USDT0` as the single debt and LP asset.
-- `WETH` and `XAUt0` as the current live collateral set.
+- `WETH`, `XAUt0`, `wstETH`, and `WXPL` as the current live collateral set.
 - Chainlink for oracle pricing and stale-feed protection.
 - OpenClaw for agent skill execution and recurring monitoring.
 - Fastify + MongoDB for the API and indexed activity layer.
@@ -122,26 +122,28 @@ Current live deployment is on Plasma mainnet.
 
 | Component | Address |
 | --- | --- |
-| `TimelockController` | `0xf33e2d7d633e722a24045171985c84c9fec3203f` |
-| `Treasury` | `0x3c4938bca1fb7305113c1615c8f80e5a98151a34` |
-| `ChainlinkPriceOracle` | `0x79ffe24187968c3302e4f19c7051d20a61fb3bc3` |
-| `MarketConfig` | `0x6eedc0adc27c97da39add56a86f254761d523e64` |
-| `DebtPool` | `0xbf48a0c38bcda0c8a0b3611d397cb68bfd31dc90` |
-| `VaultManager` | `0x6287799a8f21b3395ebcb673c32440e47e9de45e` |
+| `TimelockController` | `0x213ea85f9d74cccefdcb89145853b002118ce559` |
+| `Treasury` | `0xbda0c36ad7f6e1e5789518df695b441ab5a7c93d` |
+| `ChainlinkPriceOracle` | `0x92420e500730995b75e63c915179bacfffd68861` |
+| `MarketConfig` | `0x13d2a4863ce90f98200966e7c84c74b700a7ca22` |
+| `DebtPool` | `0xa0b229a84dd01634ec39299f3d0faac9c13b6066` |
+| `VaultManager` | `0x74cc18832ff28df45f9230ab8bbcf2fb0f648bda` |
 
 ### Assets
 
 - `USDT0` debt asset: `0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb`
 - `WETH` collateral: `0x9895D81bB462A195b4922ED7De0e3ACD007c32CB`
 - `XAUt0` collateral: `0x1B64B9025EEbb9A6239575dF9Ea4b9Ac46D4d193`
+- `wstETH` collateral: `0xe48D935e6C9e735463ccCf29a7F11e32bC09136E`
+- `WXPL` collateral: `0x6100E367285b01F48D07953803A2d8dCA5D19873`
 
 ### Oracle feeds
 
 - `USDT0/USD`: `0x3205B49b3C8c5D593589e1e70567993f72C5F845`
 - `ETH/USD`: `0x43A7dd2125266c5c4c26EB86cd61241132426Fe7`
 - `XAUT/USD`: `0x354Df1ca4AE838A45405B3486ED0161AA7f01191`
-
-`BTC/USD` is oracle-ready on Plasma, but BTC collateral is not enabled in the current live config until a canonical Plasma BTC token is finalized.
+- `wstETH` priced via ETH/USD (aliased to WETH — conservative pricing)
+- `XPL/USD`: `0xF932477C37715aE6657Ab884414Bd9876FE3f750`
 
 ## Requirements
 
