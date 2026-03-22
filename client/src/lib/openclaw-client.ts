@@ -45,9 +45,13 @@ class OpenClawClient {
           await this.rpc("connect", {
             minProtocol: 3,
             maxProtocol: 3,
-            client: { id: "webchat", displayName: "Tabby Web", mode: "webchat", version: "1.0.0", platform: "web" },
+            client: { id: "webchat-ui", displayName: "Tabby Web", mode: "webchat", version: "1.0.0", platform: "web" },
             auth: { token: GATEWAY_TOKEN },
-            scopes: ["read", "write"],
+            role: "operator",
+            scopes: ["operator.read", "operator.write"],
+            caps: ["tool-events"],
+            locale: navigator.language,
+            userAgent: navigator.userAgent,
           });
           await this.rpc("sessions.messages.subscribe", { key: "main" });
           this._connected = true;
