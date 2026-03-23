@@ -303,12 +303,12 @@ Current network target:
 
 | Component | Address |
 | --- | --- |
-| `TimelockController` | `0x213ea85f9d74cccefdcb89145853b002118ce559` |
-| `Treasury` | `0xbda0c36ad7f6e1e5789518df695b441ab5a7c93d` |
-| `ChainlinkPriceOracle` | `0x92420e500730995b75e63c915179bacfffd68861` |
-| `MarketConfig` | `0x13d2a4863ce90f98200966e7c84c74b700a7ca22` |
-| `DebtPool` | `0xa0b229a84dd01634ec39299f3d0faac9c13b6066` |
-| `VaultManager` | `0x74cc18832ff28df45f9230ab8bbcf2fb0f648bda` |
+| `TimelockController` | `0x648443185a261ff713d7347a8228e89da446a565` |
+| `Treasury` | `0x6e3fae03b2150ab01f31cdf3f1fce7d7249faefb` |
+| `ChainlinkPriceOracle` | `0x90604513f086c5e0d3175cb62ee37314dbc0f49b` |
+| `MarketConfig` | `0xbad47d072b0632ac7883b0a03a655fecf941b412` |
+| `DebtPool` | `0x7b57dda1e5ed2fcafb7b811cfa6bcf248f398d4f` |
+| `VaultManager` | `0x25633ccac9a35302f6536547ae5a532c1744cbaa` |
 
 ### Assets
 
