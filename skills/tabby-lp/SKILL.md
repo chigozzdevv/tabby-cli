@@ -15,17 +15,25 @@ This skill is the LP runtime for Tabby's Plasma protocol. It allows agents and u
 
 ## Commands
 
-All commands must be run as: `cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js <command>`
+All commands must be run as: `/home/tabby/bin/tabby-lp.sh <command>`
 
 ```bash
-cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js init-wallet
-cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js pool-status --json
-cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js position --json
-cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js approve-asset --amount 100
-cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js deposit-liquidity --amount 100
-cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js withdraw-liquidity --all
-cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js monitor-pool
+/home/tabby/bin/tabby-lp.sh init-wallet
+/home/tabby/bin/tabby-lp.sh pool-status --json
+/home/tabby/bin/tabby-lp.sh position --json
+/home/tabby/bin/tabby-lp.sh approve-asset --amount 100
+/home/tabby/bin/tabby-lp.sh deposit-liquidity --amount 100
+/home/tabby/bin/tabby-lp.sh withdraw-liquidity --all
+/home/tabby/bin/tabby-lp.sh monitor-pool
 ```
+
+## Execution Rules
+
+- Run the allowlisted wrapper directly: `/home/tabby/bin/tabby-lp.sh ...`
+- Do not ask permission to run allowlisted Tabby LP commands.
+- Do not print shell commands to the user unless they explicitly ask for the command.
+- Use `pool-status --json` and `position --json` when the UI needs structured payloads.
+- If a command fails, return the actual command error briefly in `text`.
 
 ## Agent LP Model
 
@@ -39,7 +47,7 @@ cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js monitor-po
       {
         id: "tabby-lp-monitor",
         schedule: "0 * * * *",
-        command: "cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js monitor-pool",
+        command: "/home/tabby/bin/tabby-lp.sh monitor-pool",
         enabled: true
       }
     ]

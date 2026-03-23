@@ -21,23 +21,23 @@ This skill is the borrower/operator runtime for Tabby's Plasma vault protocol.
 
 ## Commands
 
-All commands must be run as: `cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js <command>`
+All commands must be run as: `/home/tabby/bin/tabby-borrower.sh <command>`
 
 ```bash
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js init-wallet
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js market
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js quote-borrow --collateral WETH:1.25 --desired-borrow 500
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js open-vault
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js approve-collateral --asset 0xASSET --amount 1.25
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js deposit-collateral --vault-id 1 --asset 0xASSET --amount 1.25
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js borrow --vault-id 1 --amount 500
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js repay --vault-id 1 --amount all
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js withdraw-collateral --vault-id 1 --asset 0xASSET --amount all
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js vault-status --vault-id 1
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js monitor-vaults --quiet-ok
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js liquidate --vault-id 1 --amount 100 --asset 0xASSET
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js prepare-bind-operator --vault-id 1
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js confirm-bind-operator --vault-id 1
+/home/tabby/bin/tabby-borrower.sh init-wallet
+/home/tabby/bin/tabby-borrower.sh market
+/home/tabby/bin/tabby-borrower.sh quote-borrow --collateral WETH:1.25 --desired-borrow 500
+/home/tabby/bin/tabby-borrower.sh open-vault
+/home/tabby/bin/tabby-borrower.sh approve-collateral --asset 0xASSET --amount 1.25
+/home/tabby/bin/tabby-borrower.sh deposit-collateral --vault-id 1 --asset 0xASSET --amount 1.25
+/home/tabby/bin/tabby-borrower.sh borrow --vault-id 1 --amount 500
+/home/tabby/bin/tabby-borrower.sh repay --vault-id 1 --amount all
+/home/tabby/bin/tabby-borrower.sh withdraw-collateral --vault-id 1 --asset 0xASSET --amount all
+/home/tabby/bin/tabby-borrower.sh vault-status --vault-id 1
+/home/tabby/bin/tabby-borrower.sh monitor-vaults --quiet-ok
+/home/tabby/bin/tabby-borrower.sh liquidate --vault-id 1 --amount 100 --asset 0xASSET
+/home/tabby/bin/tabby-borrower.sh prepare-bind-operator --vault-id 1
+/home/tabby/bin/tabby-borrower.sh confirm-bind-operator --vault-id 1
 ```
 
 ## Operator Model
@@ -52,6 +52,18 @@ For agent-owned vaults the skill wallet itself opens and owns the vault.
 - examples: `WETH:2`, `wstETH:1.5`, `0x9895D81bB462A195b4922ED7De0e3ACD007c32CB:2`
 - amounts are human-readable token amounts, not wei
 
+## Execution Rules
+
+- For any question about borrowing power, LTV, or "what can my collateral get me", run `quote-borrow` first and answer from that result.
+- Run the allowlisted wrapper directly: `/home/tabby/bin/tabby-borrower.sh ...`
+- Do not ask permission to run allowlisted Tabby borrower commands.
+- Do not print shell commands to the user unless they explicitly ask for the command.
+- Do not offer manual estimates, price assumptions, A/B choices, or "I can do this two ways" when `quote-borrow` is available.
+- Do not claim you lack market-price access. `quote-borrow` already uses the live Tabby market data and protocol pricing exposed by the Tabby API.
+- If `quote-borrow` succeeds, return the quote directly and set `isQuote = true`.
+- If `quote-borrow` fails, return the actual command error briefly in `text`. Do not say "no usable output" unless the command truly returned no stdout and no stderr.
+- Do not ask the user to choose between retrying and an estimate unless they explicitly ask for an estimate.
+
 ## Monitoring
 
 Use OpenClaw cron for periodic monitoring:
@@ -63,7 +75,7 @@ Use OpenClaw cron for periodic monitoring:
       {
         id: "tabby-vault-monitor",
         schedule: "*/5 * * * *",
-        command: "cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js monitor-vaults --quiet-ok",
+        command: "/home/tabby/bin/tabby-borrower.sh monitor-vaults --quiet-ok",
         enabled: true
       }
     ]
@@ -148,6 +160,22 @@ Field rules:
 ```json
 {
   "text": "Tabby is an overcollateralized lending protocol on Plasma. You deposit collateral and borrow USDT0 against it.",
+  "isQuote": false,
+  "isPosition": false,
+  "isPool": false,
+  "isAction": false,
+  "quote": null,
+  "position": null,
+  "pool": null,
+  "action": null
+}
+```
+
+**Quote failure example** — command failed, so explain the real error briefly and do not invent alternatives:
+
+```json
+{
+  "text": "I couldn't produce the quote because `quote-borrow` failed with: unsupported collateral 'XYZ'.",
   "isQuote": false,
   "isPosition": false,
   "isPool": false,
