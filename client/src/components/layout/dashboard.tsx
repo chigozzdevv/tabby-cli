@@ -195,7 +195,7 @@ export const Dashboard: React.FC = () => {
           </div>
         </aside>
 
-        <ChatWindow />
+        <ChatWindow walletAddress={address} connectWallet={connect} />
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ function App() {
   const [state, setState] = useState<AppState>("loading")
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-full min-h-0 flex flex-col">
       <AnimatePresence mode="wait">
         {state === "loading" && (
           <LoadingScreen key="loading" onComplete={() => setState("mode-select")} />

@@ -58,6 +58,8 @@ For agent-owned vaults the skill wallet itself opens and owns the vault.
 - Run the allowlisted wrapper directly: `/home/tabby/bin/tabby-borrower.sh ...`
 - Do not ask permission to run allowlisted Tabby borrower commands.
 - Do not print shell commands to the user unless they explicitly ask for the command.
+- If the UI says the owner already opened the vault, deposited collateral, and bound the operator wallet, run `borrow` directly against that vault. Do not ask the user to choose a signing method.
+- Only use `prepare-bind-operator` / `confirm-bind-operator` when the vault is user-owned and the operator binding is not already complete.
 - Do not offer manual estimates, price assumptions, A/B choices, or "I can do this two ways" when `quote-borrow` is available.
 - Do not claim you lack market-price access. `quote-borrow` already uses the live Tabby market data and protocol pricing exposed by the Tabby API.
 - If `quote-borrow` succeeds, return the quote directly and set `isQuote = true`.

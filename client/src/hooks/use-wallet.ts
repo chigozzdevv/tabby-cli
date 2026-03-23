@@ -4,7 +4,7 @@ type WalletState = {
   address: `0x${string}` | null;
   isConnected: boolean;
   isConnecting: boolean;
-  connect: () => Promise<void>;
+  connect: () => Promise<`0x${string}` | null>;
   disconnect: () => void;
   error: string | null;
 };
@@ -36,15 +36,21 @@ export function useWallet(): WalletState {
   const connect = useCallback(async () => {
     if (!window.ethereum) {
       setError("No wallet detected. Install MetaMask or a compatible browser wallet.");
-      return;
+      return null;
     }
     setIsConnecting(true);
     setError(null);
     try {
       const accounts: string[] = await window.ethereum.request({ method: "eth_requestAccounts" });
-      if (accounts[0]) setAddress(accounts[0] as `0x${string}`);
+      if (accounts[0]) {
+        const next = accounts[0] as `0x${string}`;
+        setAddress(next);
+        return next;
+      }
+      return null;
     } catch (err: any) {
       setError(err?.message ?? "Connection rejected");
+      return null;
     } finally {
       setIsConnecting(false);
     }

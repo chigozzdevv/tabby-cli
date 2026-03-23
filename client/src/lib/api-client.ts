@@ -1,5 +1,11 @@
 const API_BASE = import.meta.env.VITE_TABBY_API_BASE_URL || "http://localhost:3000";
 
+type ApiEnvelope<T> = {
+  ok: boolean;
+  data?: T;
+  message?: string;
+};
+
 export type QuoteData = {
   debtAsset: { symbol: string; decimals: number; priceUsd: string };
   requestedCollaterals: {
@@ -67,6 +73,52 @@ export type MarketData = {
   }[];
 };
 
+export type PublicConfig = {
+  chainId: number;
+  timeLock: string;
+  treasury: string;
+  priceOracle: string;
+  marketConfig: AddressLike;
+  debtPool: AddressLike;
+  vaultManager: AddressLike;
+  debtAsset: AddressLike;
+  collateralAssets: AddressLike[];
+  walletRegistry: AddressLike | null;
+};
+
+export type AddressLike = `0x${string}`;
+
+export type OperatorWalletData = {
+  address: AddressLike;
+  created: boolean;
+};
+
+export type AgentBinding = {
+  bindingId: string;
+  sessionId?: string;
+  owner: AddressLike;
+  operator: AddressLike;
+  vaultId: number;
+  status: "prepared" | "bound" | "revoked";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PrepareBindingData = {
+  binding: AgentBinding;
+  currentlyBound: boolean;
+  transaction: {
+    to: AddressLike;
+    valueWei: string;
+    data: `0x${string}`;
+  };
+};
+
+export type ConfirmBindingData = {
+  binding: AgentBinding;
+  bound: boolean;
+};
+
 export type LpPosition = {
   account: string;
   asset: string;
@@ -92,6 +144,18 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T | nul
   }
 }
 
+async function apiFetchOrThrow<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  const json = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
+  if (!res.ok || !json?.ok || json.data === undefined) {
+    throw new Error(json?.message || `Request failed: ${path}`);
+  }
+  return json.data;
+}
+
 export async function getVault(vaultId: number): Promise<VaultPosition | null> {
   return apiFetch<VaultPosition>(`/public/monitoring/vaults/${vaultId}`);
 }
@@ -113,8 +177,36 @@ export async function getMarketOverview(): Promise<MarketData | null> {
   return apiFetch<MarketData>("/public/monitoring/market");
 }
 
-export async function getConfig(): Promise<Record<string, string> | null> {
-  return apiFetch<Record<string, string>>("/public/config");
+export async function getConfig(): Promise<PublicConfig | null> {
+  return apiFetch<PublicConfig>("/public/config");
+}
+
+export async function createOperatorWallet(): Promise<OperatorWalletData> {
+  return apiFetchOrThrow<OperatorWalletData>("/assistant/bindings/operator-wallet", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function prepareOperatorBinding(input: {
+  vaultId: number;
+  operator: AddressLike;
+}): Promise<PrepareBindingData> {
+  return apiFetchOrThrow<PrepareBindingData>("/assistant/bindings/prepare", {
+    method: "POST",
+    body: JSON.stringify({ vaultId: input.vaultId, operator: input.operator, allowed: true }),
+  });
+}
+
+export async function confirmOperatorBinding(input: {
+  bindingId?: string;
+  vaultId: number;
+  operator: AddressLike;
+}): Promise<ConfirmBindingData> {
+  return apiFetchOrThrow<ConfirmBindingData>("/assistant/bindings/confirm", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function formatUsd(weiStr: string, decimals = 18): string {

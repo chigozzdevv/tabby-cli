@@ -6,13 +6,15 @@ import { buildQuoteSummaryText, collateralCapacityWei, formatAmount, formatUsd, 
 
 type QuoteCardProps = {
   quote: QuoteData;
-  onAccept?: (amountWei: string) => void;
+  onAccept?: (payload: { amountWei: string; quote: QuoteData }) => Promise<void> | void;
 };
 
 export const QuoteCard: React.FC<QuoteCardProps> = ({ quote, onAccept }) => {
   const [selectedPct, setSelectedPct] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [customValue, setCustomValue] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const maxBorrowWei = BigInt(quote.totals.maxAdditionalBorrowWei);
   const capacityWei = collateralCapacityWei(quote);
@@ -31,10 +33,18 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({ quote, onAccept }) => {
     ? formatHealthFactor(((BigInt(quote.totals.totalBorrowCapacityUsd) * 10n ** 18n) / (BigInt(quote.totals.currentDebtValueUsd) + (selectedAmount * BigInt(quote.debtAsset.priceUsd)) / (10n ** BigInt(decimals)))).toString())
     : null;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!hasBorrowableAmount || selectedAmount <= 0n) return;
-    setConfirmed(true);
-    onAccept?.(selectedAmount.toString());
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onAccept?.({ amountWei: selectedAmount.toString(), quote });
+      setConfirmed(true);
+    } catch (err: any) {
+      setError(err?.message ?? "Borrow setup failed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -135,19 +145,26 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({ quote, onAccept }) => {
                 </div>
               )}
 
+              {error && (
+                <div className="mb-2 border border-tactical-error/40 bg-tactical-error/5 px-2 py-2 text-[10px] text-tactical-error">
+                  {error}
+                </div>
+              )}
+
               {selectedPct && hasBorrowableAmount && (
                 <button
-                  onClick={handleConfirm}
-                  className="w-full btn py-2 text-[11px]"
+                  onClick={() => void handleConfirm()}
+                  disabled={submitting}
+                  className="w-full btn py-2 text-[11px] disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Confirm Borrow
+                  {submitting ? "Preparing Vault..." : "Confirm Borrow"}
                 </button>
               )}
             </>
           ) : (
             <div className="flex items-center gap-2 text-tactical-accent text-[11px] py-2">
               <Check size={14} />
-              <span className="font-bold uppercase">Borrow of {formatAmount(selectedAmount.toString(), decimals)} {quote.debtAsset.symbol} submitted</span>
+              <span className="font-bold uppercase">Vault prepared. Borrow request sent for {formatAmount(selectedAmount.toString(), decimals)} {quote.debtAsset.symbol}</span>
             </div>
           )}
         </div>

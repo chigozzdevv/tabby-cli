@@ -1,6 +1,9 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { encodeFunctionData } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { english, generateMnemonic, mnemonicToAccount } from "viem/accounts";
 import { getDb } from "@/db/mongodb.js";
 import { HttpError } from "@/shared/http-errors.js";
 import { env } from "@/config/env.js";
@@ -45,6 +48,12 @@ type AgentBindingDoc = {
 };
 
 const zeroAddress = "0x0000000000000000000000000000000000000000";
+const borrowerWalletFilePath = path.join(os.homedir(), ".config", "tabby-borrower", "wallet.json");
+
+type BorrowerWalletStore = {
+  address: `0x${string}`;
+  seedPhrase: string;
+};
 
 function toSessionApi(doc: AssistantSessionDoc): AssistantSession {
   return {
@@ -192,22 +201,50 @@ export async function appendAssistantMessage(input: {
 }
 
 export async function generateOperatorWallet(sessionId?: string) {
-  const privateKey = `0x${randomBytes(32).toString("hex")}` as `0x${string}`;
-  const account = privateKeyToAccount(privateKey);
+  const wallet = await ensureBorrowerOperatorWallet();
 
   if (sessionId) {
     const db = getDb();
     const sessions = db.collection<AssistantSessionDoc>("assistant-sessions");
     await sessions.updateOne(
       { sessionId },
-      { $set: { operatorAddress: account.address.toLowerCase(), updatedAt: new Date() } }
+      { $set: { operatorAddress: wallet.address.toLowerCase(), updatedAt: new Date() } }
     );
   }
 
   return {
-    address: account.address as `0x${string}`,
-    privateKey,
+    address: wallet.address as `0x${string}`,
+    created: wallet.created,
   };
+}
+
+async function ensureBorrowerOperatorWallet(): Promise<{ address: `0x${string}`; created: boolean }> {
+  try {
+    const raw = await fs.readFile(borrowerWalletFilePath, "utf8");
+    const parsed = JSON.parse(raw) as Partial<BorrowerWalletStore>;
+    if (typeof parsed.seedPhrase !== "string" || parsed.seedPhrase.trim().length === 0) {
+      throw new Error("missing-seed-phrase");
+    }
+    const account = mnemonicToAccount(parsed.seedPhrase);
+    const store: BorrowerWalletStore = {
+      address: account.address,
+      seedPhrase: parsed.seedPhrase,
+    };
+    if (parsed.address?.toLowerCase() !== store.address.toLowerCase()) {
+      await fs.writeFile(borrowerWalletFilePath, JSON.stringify(store, null, 2), { mode: 0o600 });
+    }
+    return { address: store.address, created: false };
+  } catch {}
+
+  const seedPhrase = generateMnemonic(english);
+  const account = mnemonicToAccount(seedPhrase);
+  const store: BorrowerWalletStore = {
+    address: account.address,
+    seedPhrase,
+  };
+  await fs.mkdir(path.dirname(borrowerWalletFilePath), { recursive: true });
+  await fs.writeFile(borrowerWalletFilePath, JSON.stringify(store, null, 2), { mode: 0o600 });
+  return { address: store.address, created: true };
 }
 
 export async function getBorrowPreflightQuote(input: {

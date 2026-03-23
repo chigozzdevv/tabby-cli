@@ -8,6 +8,7 @@ import { openClawClient, extractStreamingText, parseResponse } from "../../lib/o
 import type { TabbyCard } from "../../lib/openclaw-client";
 import type { QuoteData, VaultPosition, PoolData } from "../../lib/api-client";
 import { formatBps, formatUsd } from "../../lib/api-client";
+import { bootstrapBorrowForOwner, buildBorrowExecutionPrompt } from "../../lib/borrow-flow";
 
 export interface Message {
   id: string;
@@ -80,7 +81,10 @@ const MessageContent: React.FC<{ content: string; streaming?: boolean }> = ({ co
   );
 };
 
-export const ChatWindow: React.FC = () => {
+export const ChatWindow: React.FC<{
+  walletAddress: `0x${string}` | null;
+  connectWallet: () => Promise<`0x${string}` | null>;
+}> = ({ walletAddress, connectWallet }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [pendingContext, setPendingContext] = useState<ContextItem[]>([]);
@@ -207,6 +211,29 @@ export const ChatWindow: React.FC = () => {
     handleSend(`${action} — ${detail}`);
   };
 
+  const handleQuoteAccept = async ({ amountWei, quote }: { amountWei: string; quote: QuoteData }) => {
+    const ownerAddress = walletAddress ?? (await connectWallet());
+    if (!ownerAddress) {
+      throw new Error("Connect your wallet to continue.");
+    }
+
+    const result = await bootstrapBorrowForOwner({
+      ownerAddress,
+      quote,
+      amountWei,
+    });
+
+    await handleSend(
+      buildBorrowExecutionPrompt({
+        quote,
+        amountWei,
+        vaultId: result.vaultId,
+        ownerAddress: result.ownerAddress,
+        operatorAddress: result.operatorAddress,
+      })
+    );
+  };
+
   const onInputDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDraggingOver(false);
@@ -296,7 +323,7 @@ export const ChatWindow: React.FC = () => {
                     {!msg.streaming && msg.card?.type === "quote" && (
                       <QuoteCard
                         quote={msg.card.data as QuoteData}
-                        onAccept={amountWei => handleCardAction("confirm borrow", `${amountWei} wei`)}
+                        onAccept={handleQuoteAccept}
                       />
                     )}
                     {!msg.streaming && msg.card?.type === "position" && (
