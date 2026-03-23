@@ -474,11 +474,24 @@ async function fetchVaultsByOwner(protocol: ProtocolConfig, owner: `0x${string}`
 
 async function fetchBorrowPreflightQuote(protocol: ProtocolConfig, input: any): Promise<BorrowPreflightQuote> {
   const url = new URL("/assistant/quotes/preflight", baseUrl()).toString();
-  return await fetchOptionalJson<BorrowPreflightQuote>(url, {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
-  }) as any;
+  });
+
+  let payload: any;
+  try {
+    payload = await res.json();
+  } catch {
+    throw new Error(`Failed to fetch borrow quote (${res.status})`);
+  }
+
+  if (!res.ok || !payload?.ok) {
+    throw new Error(payload?.message ?? payload?.error ?? `Failed to fetch borrow quote (${res.status})`);
+  }
+
+  return payload.data as BorrowPreflightQuote;
 }
 
 async function prepareOperatorBinding(protocol: ProtocolConfig, input: any) {
@@ -637,12 +650,44 @@ async function commandMarket() {
 
 async function commandQuoteBorrow() {
   const protocol = await resolveProtocolConfig();
-  const quote = await fetchBorrowPreflightQuote(protocol, { 
-      collaterals: getArgs("--collateral").map(c => {
-          const [asset, amount] = c.split(":");
-          return { asset, amountWei: amount };
-      })
+  const market = await fetchMarketOverview(protocol);
+  const collateralArgs = getArgs("--collateral");
+
+  if (collateralArgs.length === 0) {
+    throw new Error("Missing --collateral <asset:amount>");
+  }
+
+  const collaterals: AssistantCollateralIntent[] = collateralArgs.map((raw) => {
+    const [assetRef, amount] = raw.split(":");
+    if (!assetRef || !amount) {
+      throw new Error(`Invalid collateral input '${raw}'. Use <symbol-or-address>:<amount>.`);
+    }
+
+    const collateral = market.collaterals.find(
+      (item) =>
+        item.asset.address.toLowerCase() === assetRef.toLowerCase() ||
+        item.asset.symbol.toLowerCase() === assetRef.toLowerCase()
+    );
+
+    if (!collateral) {
+      throw new Error(`Unsupported collateral '${assetRef}'. Run market to list supported assets.`);
+    }
+
+    return {
+      asset: collateral.asset.address,
+      amountWei: parseUnits(amount, collateral.asset.decimals).toString(),
+    };
   });
+
+  const desiredBorrow = getArg("--desired-borrow");
+  const desiredBorrowWei = getArg("--desired-borrow-wei")
+    ?? (desiredBorrow ? parseUnits(desiredBorrow, market.debtAsset.decimals).toString() : undefined);
+
+  const quote = await fetchBorrowPreflightQuote(protocol, {
+    collaterals,
+    desiredBorrowWei,
+  });
+
   printJson(quote);
 }
 
@@ -960,7 +1005,7 @@ tabby-borrower <command>
 Commands:
   init-wallet
   market [--json]
-  quote-borrow --collateral <asset:amount> [--collateral <asset:amount> ...]
+  quote-borrow --collateral <asset:amount> [--collateral <asset:amount> ...] [--desired-borrow <n>] [--desired-borrow-wei <wei>]
   open-vault
   approve-collateral --amount <n> [--asset <addr>]
   deposit-collateral --vault-id <id> --amount <n> [--asset <addr>]

@@ -31,6 +31,8 @@ export const debtPoolAbi = [
   { type: "function", name: "totalShares", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "utilizationBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "currentBorrowRateBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "previewDeposit", stateMutability: "view", inputs: [{ name: "assets", type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "previewWithdraw", stateMutability: "view", inputs: [{ name: "shares", type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "account", type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "deposit", stateMutability: "nonpayable", inputs: [{ name: "assets", type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "withdraw", stateMutability: "nonpayable", inputs: [{ name: "shares", type: "uint256" }], outputs: [{ type: "uint256" }] },
@@ -68,6 +70,13 @@ export type ProtocolConfig = {
   walletRegistry?: `0x${string}`;
 };
 
+function requireAddress(value: unknown, label: string): `0x${string}` {
+  if (typeof value !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(value)) {
+    throw new Error(`Missing or invalid ${label}`);
+  }
+  return value as `0x${string}`;
+}
+
 export async function resolveProtocolConfig(): Promise<ProtocolConfig> {
   const ENV = getEnv();
   
@@ -84,15 +93,16 @@ export async function resolveProtocolConfig(): Promise<ProtocolConfig> {
   const rpcUrl = ENV.RPC_URL ?? (chainId === 9745 ? "https://rpc.plasma.to" : undefined);
   if (!rpcUrl) throw new Error("Missing RPC_URL");
 
-  const collateralAssets = (ENV.COLLATERAL_ASSETS?.split(",") as `0x${string}`[]) ?? publicConfig?.collateralAssets ?? [];
+  const collateralAssets = ((ENV.COLLATERAL_ASSETS?.split(",") as `0x${string}`[]) ?? publicConfig?.collateralAssets ?? [])
+    .filter(Boolean);
 
   return {
     chainId,
     rpcUrl,
-    vaultManager: (ENV.VAULT_MANAGER_ADDRESS as `0x${string}`) ?? publicConfig?.vaultManager,
-    debtPool: (ENV.DEBT_POOL_ADDRESS as `0x${string}`) ?? publicConfig?.debtPool,
-    marketConfig: (ENV.MARKET_CONFIG_ADDRESS as `0x${string}`) ?? publicConfig?.marketConfig,
-    debtAsset: (ENV.DEBT_ASSET_ADDRESS as `0x${string}`) ?? publicConfig?.debtAsset,
+    vaultManager: requireAddress(ENV.VAULT_MANAGER_ADDRESS ?? publicConfig?.vaultManager, "VAULT_MANAGER_ADDRESS"),
+    debtPool: requireAddress(ENV.DEBT_POOL_ADDRESS ?? publicConfig?.debtPool, "DEBT_POOL_ADDRESS"),
+    marketConfig: requireAddress(ENV.MARKET_CONFIG_ADDRESS ?? publicConfig?.marketConfig, "MARKET_CONFIG_ADDRESS"),
+    debtAsset: requireAddress(ENV.DEBT_ASSET_ADDRESS ?? publicConfig?.debtAsset, "DEBT_ASSET_ADDRESS"),
     collateralAssets,
     walletRegistry: publicConfig?.walletRegistry === zeroAddress ? undefined : publicConfig?.walletRegistry,
   };

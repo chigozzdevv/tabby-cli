@@ -29,7 +29,7 @@ const ROLES: Record<Tab, RoleConfig> = {
     commands: [
       "node dist/tabby-borrower/bin/tabby-borrower.js init-wallet",
       "node dist/tabby-borrower/bin/tabby-borrower.js market",
-      "node dist/tabby-borrower/bin/tabby-borrower.js quote-borrow --collateral 0xASSET:1.25 --desired-borrow 500",
+      "node dist/tabby-borrower/bin/tabby-borrower.js quote-borrow --collateral WETH:1.25 --desired-borrow 500",
     ],
     prompts: [
       "How much can I borrow with 2 WETH?",

@@ -19,8 +19,8 @@ All commands must be run as: `cd /home/tabby/tabby-cli/skills && node dist/tabby
 
 ```bash
 cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js init-wallet
-cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js pool-status
-cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js position
+cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js pool-status --json
+cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js position --json
 cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js approve-asset --amount 100
 cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js deposit-liquidity --amount 100
 cd /home/tabby/tabby-cli/skills && node dist/tabby-lp/bin/tabby-lp.js withdraw-liquidity --all
@@ -70,6 +70,7 @@ Field rules:
 - At most one of `isQuote`, `isPosition`, `isPool`, `isAction` is `true` at a time
 - When a flag is `true`, populate the matching field with the raw JSON output from the command; set all others to `null`
 - `action` shape: `{ "type": "deposit" | "withdraw", "success": true, "detail": "..." }`
+- Use `pool-status --json` and `position --json` when you need raw structured payloads
 
 **When to set isPool = true** — user asks about pool APY, utilization, TVL, borrow rate, pool health:
 

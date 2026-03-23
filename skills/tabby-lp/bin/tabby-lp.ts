@@ -19,6 +19,7 @@ import {
 } from "../../lib/protocol.js";
 
 type PoolOverview = {
+  asset: `0x${string}`;
   assetSymbol: string;
   assetDecimals: number;
   totalAssetsWei: string;
@@ -28,6 +29,17 @@ type PoolOverview = {
   utilizationBps: number;
   currentBorrowRateBps: number;
   supplyApyBps: number;
+};
+
+type PoolPosition = {
+  account: `0x${string}`;
+  asset: `0x${string}`;
+  assetSymbol: string;
+  assetDecimals: number;
+  shares: string;
+  totalShares: string;
+  totalAssetsWei: string;
+  estimatedAssetsWei: string;
 };
 
 const maxUint256 = (1n << 256n) - 1n;
@@ -49,6 +61,19 @@ async function saveWallet(seedPhrase: string): Promise<{ address: string; path: 
 
 async function sendNotification(message: string) {
   console.log(`NOTIFICATION: ${message}`);
+}
+
+function printJson(value: unknown) {
+  console.log(JSON.stringify(value, null, 2));
+}
+
+function getArg(name: string) {
+  const idx = process.argv.indexOf(name);
+  return idx >= 0 ? process.argv[idx + 1] : undefined;
+}
+
+function hasFlag(name: string) {
+  return process.argv.includes(name);
 }
 
 async function getPoolOverview(publicClient: any, protocol: ProtocolConfig): Promise<PoolOverview> {
@@ -83,6 +108,7 @@ async function getPoolOverview(publicClient: any, protocol: ProtocolConfig): Pro
   const supplyApyBps = Math.floor((borrowRate * utilization * (10000 - fee)) / 100000000);
 
   return {
+    asset,
     assetSymbol: symbol,
     assetDecimals: decimals,
     totalAssetsWei: totalAssets.toString(),
@@ -95,6 +121,33 @@ async function getPoolOverview(publicClient: any, protocol: ProtocolConfig): Pro
   };
 }
 
+async function getPoolPosition(publicClient: any, protocol: ProtocolConfig, account: `0x${string}`): Promise<PoolPosition> {
+  const [asset, shares, totalShares, totalAssets] = await Promise.all([
+    publicClient.readContract({ address: protocol.debtPool, abi: debtPoolAbi, functionName: "ASSET" }),
+    publicClient.readContract({ address: protocol.debtPool, abi: debtPoolAbi, functionName: "balanceOf", args: [account] }),
+    publicClient.readContract({ address: protocol.debtPool, abi: debtPoolAbi, functionName: "totalShares" }),
+    publicClient.readContract({ address: protocol.debtPool, abi: debtPoolAbi, functionName: "totalAssets" }),
+  ]);
+
+  const [assetSymbol, assetDecimals] = await Promise.all([
+    publicClient.readContract({ address: asset, abi: erc20Abi, functionName: "symbol" }),
+    publicClient.readContract({ address: asset, abi: erc20Abi, functionName: "decimals" }),
+  ]);
+
+  const estimatedAssets = totalShares === 0n ? 0n : (shares * totalAssets) / totalShares;
+
+  return {
+    account,
+    asset,
+    assetSymbol,
+    assetDecimals,
+    shares: shares.toString(),
+    totalShares: totalShares.toString(),
+    totalAssetsWei: totalAssets.toString(),
+    estimatedAssetsWei: estimatedAssets.toString(),
+  };
+}
+
 function usage() {
   console.log(`
 tabby-lp <command>
@@ -102,8 +155,10 @@ tabby-lp <command>
 Commands:
   init-wallet [--force]
   pool-status [--json]
+  position [--json]
+  approve-asset --amount <n>
   deposit-liquidity --amount <n>
-  withdraw-liquidity <--amount <n> | --shares <n> | --all>
+  withdraw-liquidity [--amount <n> | --shares <n> | --all]
   monitor-pool
 `);
 }
@@ -124,7 +179,7 @@ async function main() {
       } catch {}
       const seedPhrase = generateSeedPhrase();
       const { address, path: p } = await saveWallet(seedPhrase);
-      console.log(JSON.stringify({ address, path: p, seedPhrase, ok: true }));
+      printJson({ address, path: p, ok: true });
       return;
     }
 
@@ -134,8 +189,8 @@ async function main() {
 
     if (cmd === "pool-status") {
       const overview = await getPoolOverview(publicClient, protocol);
-      if (process.argv.includes("--json")) {
-        console.log(JSON.stringify(overview, null, 2));
+      if (hasFlag("--json")) {
+        printJson(overview);
       } else {
         console.log(`
 Pool Status (${overview.assetSymbol}):
@@ -147,31 +202,101 @@ Pool Status (${overview.assetSymbol}):
   Supply APY: ${(overview.supplyApyBps / 100).toFixed(2)}% (est.)
 `);
       }
+    } else if (cmd === "position") {
+      const wallet = await loadWallet();
+      const position = await getPoolPosition(publicClient, protocol, wallet.address);
+      if (hasFlag("--json")) {
+        printJson(position);
+      } else {
+        console.log(`
+LP Position (${position.assetSymbol}):
+  Shares: ${formatUnits(BigInt(position.shares), position.assetDecimals)}
+  Estimated Assets: ${formatUnits(BigInt(position.estimatedAssetsWei), position.assetDecimals)} ${position.assetSymbol}
+`);
+      }
+    } else if (cmd === "approve-asset") {
+      const amountStr = getArg("--amount");
+      if (!amountStr) throw new Error("Missing --amount");
+
+      const wallet = await loadWallet();
+      const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
+      const decimals = await publicClient.readContract({ address: protocol.debtAsset, abi: erc20Abi, functionName: "decimals" });
+      const amount = parseUnits(amountStr, Number(decimals));
+      const allowance = await publicClient.readContract({
+        address: protocol.debtAsset,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [wallet.address, protocol.debtPool],
+      });
+
+      if (allowance >= amount) {
+        printJson({
+          ok: true,
+          approved: false,
+          asset: protocol.debtAsset,
+          spender: protocol.debtPool,
+          amountWei: amount.toString(),
+          currentAllowanceWei: allowance.toString(),
+        });
+        return;
+      }
+
+      const hash = await walletClient.writeContract({
+        address: protocol.debtAsset,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [protocol.debtPool, maxUint256],
+      });
+      await publicClient.waitForTransactionReceipt({ hash });
+      printJson({
+        ok: true,
+        approved: true,
+        asset: protocol.debtAsset,
+        spender: protocol.debtPool,
+        amountWei: amount.toString(),
+        txHash: hash,
+      });
     } else if (cmd === "deposit-liquidity") {
-      const amountStr = process.argv.find((a, i) => process.argv[i - 1] === "--amount");
+      const amountStr = getArg("--amount");
       if (!amountStr) throw new Error("Missing --amount");
       const wallet = await loadWallet();
       const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
 
       const decimals = await publicClient.readContract({ address: protocol.debtAsset, abi: erc20Abi, functionName: "decimals" });
       const amount = parseUnits(amountStr, Number(decimals));
+      const previewShares = await publicClient.readContract({
+        address: protocol.debtPool,
+        abi: debtPoolAbi,
+        functionName: "previewDeposit",
+        args: [amount],
+      });
 
       const allowance = await publicClient.readContract({ address: protocol.debtAsset, abi: erc20Abi, functionName: "allowance", args: [wallet.address, protocol.debtPool] });
+      let approvalTxHash: `0x${string}` | undefined;
       if (allowance < amount) {
-        process.stdout.write("Approving...");
-        const hash = await walletClient.writeContract({ address: protocol.debtAsset, abi: erc20Abi, functionName: "approve", args: [protocol.debtPool, maxUint256] });
-        await publicClient.waitForTransactionReceipt({ hash });
-        console.log(" Done.");
+        approvalTxHash = await walletClient.writeContract({
+          address: protocol.debtAsset,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [protocol.debtPool, maxUint256],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: approvalTxHash });
       }
 
-      process.stdout.write("Depositing...");
       const hash = await walletClient.writeContract({ address: protocol.debtPool, abi: debtPoolAbi, functionName: "deposit", args: [amount] });
       await publicClient.waitForTransactionReceipt({ hash });
-      console.log(" Successfully deposited.");
+      printJson({
+        ok: true,
+        txHash: hash,
+        asset: protocol.debtAsset,
+        amountWei: amount.toString(),
+        previewShares: previewShares.toString(),
+        approvalTxHash,
+      });
     } else if (cmd === "withdraw-liquidity") {
-      const sharesStr = process.argv.find((a, i) => process.argv[i - 1] === "--shares");
-      const amountStr = process.argv.find((a, i) => process.argv[i - 1] === "--amount");
-      const isAll = process.argv.includes("--all");
+      const sharesStr = getArg("--shares");
+      const amountStr = getArg("--amount");
+      const isAll = hasFlag("--all");
       if (!sharesStr && !amountStr && !isAll) throw new Error("Missing --shares, --amount, or --all");
 
       const wallet = await loadWallet();
@@ -187,7 +312,7 @@ Pool Status (${overview.assetSymbol}):
           args: [wallet.address]
         }) as any;
       } else if (sharesStr) {
-        sharesToWithdraw = parseUnits(sharesStr, 18);
+        sharesToWithdraw = parseUnits(sharesStr, Number(decimals));
       } else {
         const amount = parseUnits(amountStr!, Number(decimals));
         sharesToWithdraw = await publicClient.readContract({
@@ -198,7 +323,12 @@ Pool Status (${overview.assetSymbol}):
         }) as any;
       }
 
-      process.stdout.write(`Withdrawing ${sharesToWithdraw.toString()} shares...`);
+      const expectedAssetsWei = await publicClient.readContract({
+        address: protocol.debtPool,
+        abi: debtPoolAbi,
+        functionName: "previewWithdraw",
+        args: [sharesToWithdraw],
+      });
       const hash = await walletClient.writeContract({
         address: protocol.debtPool,
         abi: debtPoolAbi,
@@ -206,7 +336,14 @@ Pool Status (${overview.assetSymbol}):
         args: [sharesToWithdraw]
       });
       await publicClient.waitForTransactionReceipt({ hash });
-      console.log(" Successfully withdrawn.");
+      printJson({
+        ok: true,
+        txHash: hash,
+        shares: sharesToWithdraw.toString(),
+        expectedAssetsWei: expectedAssetsWei.toString(),
+        requestedAmountWei: amountStr ? parseUnits(amountStr, Number(decimals)).toString() : undefined,
+        all: isAll,
+      });
     } else if (cmd === "monitor-pool") {
       const overview = await getPoolOverview(publicClient, protocol);
       console.log(`Yield is currently ${(overview.supplyApyBps / 100).toFixed(2)}%. Pool utilization: ${(overview.utilizationBps / 100).toFixed(2)}%`);

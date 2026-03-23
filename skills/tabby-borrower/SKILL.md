@@ -26,7 +26,7 @@ All commands must be run as: `cd /home/tabby/tabby-cli/skills && node dist/tabby
 ```bash
 cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js init-wallet
 cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js market
-cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js quote-borrow --collateral 0xASSET:1.25 --desired-borrow 500
+cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js quote-borrow --collateral WETH:1.25 --desired-borrow 500
 cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js open-vault
 cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js approve-collateral --asset 0xASSET --amount 1.25
 cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.js deposit-collateral --vault-id 1 --asset 0xASSET --amount 1.25
@@ -45,6 +45,12 @@ cd /home/tabby/tabby-cli/skills && node dist/tabby-borrower/bin/tabby-borrower.j
 For human-owned vaults the human wallet owns the vault, the skill wallet is bound as operator through `setVaultOperator(...)`, the human signs the binding transaction, and after binding the skill can manage the vault.
 
 For agent-owned vaults the skill wallet itself opens and owns the vault.
+
+## Quote Input
+
+- `quote-borrow` accepts a collateral symbol or collateral address
+- examples: `WETH:2`, `wstETH:1.5`, `0x9895D81bB462A195b4922ED7De0e3ACD007c32CB:2`
+- amounts are human-readable token amounts, not wei
 
 ## Monitoring
 

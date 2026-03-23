@@ -242,7 +242,7 @@ Borrower examples:
 cd skills
 node dist/tabby-borrower/bin/tabby-borrower.js init-wallet
 node dist/tabby-borrower/bin/tabby-borrower.js market
-node dist/tabby-borrower/bin/tabby-borrower.js quote-borrow --collateral 0xASSET:1.25 --desired-borrow 500
+node dist/tabby-borrower/bin/tabby-borrower.js quote-borrow --collateral WETH:1.25 --desired-borrow 500
 node dist/tabby-borrower/bin/tabby-borrower.js open-vault
 node dist/tabby-borrower/bin/tabby-borrower.js vault-status --vault-id 1
 ```
