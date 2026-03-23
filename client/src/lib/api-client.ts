@@ -12,11 +12,14 @@ export type QuoteData = {
     liquidationThresholdBps: number;
   }[];
   totals: {
+    requestedCollateralValueUsd: string;
     totalCollateralValueUsd: string;
     totalBorrowCapacityUsd: string;
     maxAdditionalBorrowUsd: string;
     maxAdditionalBorrowWei: string;
     currentDebtValueUsd: string;
+    poolAvailableLiquidityWei: string;
+    debtCapHeadroomWei: string;
   };
   suggestedRangeWei: {
     conservative: string;
@@ -137,4 +140,47 @@ export function formatHealthFactor(hfE18: string): { value: string; color: strin
 
 export function formatBps(bps: number): string {
   return `${(bps / 100).toFixed(2)}%`;
+}
+
+export function collateralCapacityWei(quote: QuoteData): bigint {
+  const priceUsd = BigInt(quote.debtAsset.priceUsd);
+  if (priceUsd === 0n) return 0n;
+  return (BigInt(quote.totals.maxAdditionalBorrowUsd) * 10n ** BigInt(quote.debtAsset.decimals)) / priceUsd;
+}
+
+export function quoteConstraintText(quote: QuoteData): string | null {
+  const borrowableNowWei = BigInt(quote.totals.maxAdditionalBorrowWei);
+  const poolAvailableLiquidityWei = BigInt(quote.totals.poolAvailableLiquidityWei);
+  const debtCapHeadroomWei = BigInt(quote.totals.debtCapHeadroomWei);
+
+  if (borrowableNowWei > 0n) return null;
+  if (poolAvailableLiquidityWei === 0n && debtCapHeadroomWei === 0n) {
+    return "No USDT0 is borrowable right now because pool liquidity is empty and the market debt cap has no headroom.";
+  }
+  if (poolAvailableLiquidityWei === 0n) {
+    return "No USDT0 is borrowable right now because the pool has no available liquidity.";
+  }
+  if (debtCapHeadroomWei === 0n) {
+    return "No USDT0 is borrowable right now because the market debt cap is fully used.";
+  }
+  return "Current borrowable amount is constrained by pool liquidity or market limits.";
+}
+
+export function buildQuoteSummaryText(quote: QuoteData): string {
+  const collateral = quote.requestedCollaterals[0];
+  const ltv = collateral ? formatBps(collateral.borrowLtvBps) : "0.00%";
+  const amountLabel =
+    quote.requestedCollaterals.length === 1 && collateral
+      ? `${formatAmount(collateral.requestedAmountWei, collateral.decimals)} ${collateral.symbol}`
+      : "the selected collateral";
+
+  const borrowableNowWei = BigInt(quote.totals.maxAdditionalBorrowWei);
+  const capacityWei = collateralCapacityWei(quote);
+  const constraint = quoteConstraintText(quote);
+
+  if (borrowableNowWei === 0n && capacityWei > 0n) {
+    return `With ${amountLabel} you have ${formatAmount(capacityWei.toString(), quote.debtAsset.decimals)} ${quote.debtAsset.symbol} of collateral capacity at ${ltv}, but 0 ${quote.debtAsset.symbol} is borrowable right now. ${constraint}`;
+  }
+
+  return `With ${amountLabel} you can borrow up to ${formatAmount(quote.totals.maxAdditionalBorrowWei, quote.debtAsset.decimals)} ${quote.debtAsset.symbol} at ${ltv}.`;
 }

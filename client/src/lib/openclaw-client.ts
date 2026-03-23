@@ -1,3 +1,5 @@
+import { buildQuoteSummaryText } from "./api-client";
+
 const GATEWAY_URL = import.meta.env.VITE_OPENCLAW_GATEWAY_URL || "ws://localhost:3000/gateway";
 const GATEWAY_TOKEN = import.meta.env.VITE_OPENCLAW_TOKEN || "";
 
@@ -312,13 +314,17 @@ export function parseResponse(raw: string): { text: string; card: TabbyCard | nu
   else if (parsed.isPool && parsed.pool) card = { type: "pool", data: parsed.pool };
   else if (parsed.isAction && parsed.action) card = { type: "action", data: parsed.action };
 
-  const parsedText = typeof parsed.text === "string" ? parsed.text.trim() : "";
+  let parsedText = typeof parsed.text === "string" ? parsed.text.trim() : "";
+  if (card?.type === "quote") {
+    try {
+      parsedText = buildQuoteSummaryText(card.data);
+    } catch {}
+  }
   const fallbackText =
     card?.type === "quote" ? "Quote ready." :
     card?.type === "position" ? "Position loaded." :
     card?.type === "pool" ? "Pool status loaded." :
     card?.type === "action" ? "Action completed." :
     fallbackRaw;
-
   return { text: parsedText || fallbackText, card };
 }
