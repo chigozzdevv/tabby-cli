@@ -112,6 +112,7 @@ export const ChatWindow: React.FC = () => {
             id: `history-${i}`,
             role: m.role,
             content: m.content,
+            card: m.card ?? undefined,
           })));
         }
       })
@@ -173,11 +174,23 @@ export const ChatWindow: React.FC = () => {
         } else {
           const finalContent = chunk || accumulatedRef.current;
           const { text, card } = parseResponse(finalContent);
-          setMessages(prev => prev.map(m =>
-            m.id === assistantId
-              ? { ...m, content: text, card: card ?? undefined, streaming: false }
-              : m
-          ));
+          const normalizedText = text.trim();
+          setMessages(prev => {
+            if (!normalizedText && !card) {
+              return prev.filter(m => m.id !== assistantId);
+            }
+
+            return prev.map(m =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content: normalizedText || m.content,
+                    card: card ?? undefined,
+                    streaming: false,
+                  }
+                : m
+            );
+          });
           streamingIdRef.current = null;
         }
       });

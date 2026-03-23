@@ -9,7 +9,68 @@ export type ChunkHandler = (streamingText: string, done: boolean) => void;
 export type HistoryMessage = {
   role: "user" | "assistant";
   content: string;
+  card?: TabbyCard | null;
 };
+
+function extractTextContent(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => extractTextContent(item))
+      .filter((item) => item.trim().length > 0)
+      .join("\n")
+      .trim();
+  }
+
+  if (typeof value !== "object" || value === null) return "";
+
+  const record = value as Record<string, unknown>;
+
+  if (typeof record.text === "string") return record.text;
+  if (typeof record.body === "string") return record.body;
+  if (typeof record.message === "string") return record.message;
+
+  const nestedKeys = ["content", "parts", "message", "payload", "value"];
+  for (const key of nestedKeys) {
+    if (key in record) {
+      const nested = extractTextContent(record[key]);
+      if (nested.trim().length > 0) return nested;
+    }
+  }
+
+  return "";
+}
+
+function isStartupBoilerplate(text: string): boolean {
+  return (
+    text.startsWith("A new session was started via /new or /reset.") ||
+    (text.includes("Run your Session Startup sequence") && text.includes("what they want to do"))
+  );
+}
+
+function sanitizeHistoryText(role: HistoryMessage["role"], text: string): string | null {
+  if (!text.trim()) return null;
+
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (isStartupBoilerplate(normalized)) return null;
+
+  const cleanedLines = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .map((line) => {
+      if (!line) return "";
+      if (/^System:\s*\[[^\]]+\]\s*Exec (completed|failed)\b/i.test(line)) return "";
+      return line.replace(/^\[[^\]]+\]\s*/, "").trim();
+    })
+    .filter(Boolean);
+
+  if (cleanedLines.length === 0) return null;
+
+  const cleaned = cleanedLines.join("\n").trim();
+  if (!cleaned) return null;
+  if (role === "user" && isStartupBoilerplate(cleaned)) return null;
+  return cleaned;
+}
 
 function bytesToBase64(bytes: Uint8Array): string {
   let s = "";
@@ -164,10 +225,21 @@ class OpenClawClient {
       const entries: any[] = res?.messages ?? res?.entries ?? [];
       return entries
         .filter((e: any) => e.role === "user" || e.role === "assistant")
-        .map((e: any) => ({
-          role: e.role,
-          content: typeof e.content === "string" ? e.content : e.content?.[0]?.text ?? "",
-        }));
+        .map((e: any): HistoryMessage | null => {
+          const rawContent = extractTextContent(e.content ?? e.message?.content ?? e.body ?? "");
+          if (e.role === "assistant") {
+            const { text, card } = parseResponse(rawContent);
+            const sanitizedText = sanitizeHistoryText(e.role, text);
+            if (!sanitizedText && !card) return null;
+            return { role: e.role, content: sanitizedText ?? "", card };
+          }
+
+          const sanitizedText = sanitizeHistoryText(e.role, rawContent);
+          if (!sanitizedText) return null;
+          return { role: e.role, content: sanitizedText, card: null };
+        })
+        .filter((e): e is HistoryMessage => !!e)
+        .filter((e: HistoryMessage) => e.content.trim().length > 0 || !!e.card);
     } catch {
       return [];
     }
@@ -220,6 +292,7 @@ export function extractStreamingText(partial: string): string {
 
 export function parseResponse(raw: string): { text: string; card: TabbyCard | null } {
   let parsed: Partial<TabbyResponse> | null = null;
+  const fallbackRaw = raw.trim();
 
   try {
     const jsonStart = raw.indexOf("{");
@@ -228,17 +301,24 @@ export function parseResponse(raw: string): { text: string; card: TabbyCard | nu
       parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
     }
   } catch {
-    return { text: raw.trim(), card: null };
+    return { text: fallbackRaw, card: null };
   }
 
-  if (!parsed) return { text: raw.trim(), card: null };
+  if (!parsed) return { text: fallbackRaw, card: null };
 
-  const text = parsed.text ?? raw.trim();
+  let card: TabbyCard | null = null;
+  if (parsed.isQuote && parsed.quote) card = { type: "quote", data: parsed.quote };
+  else if (parsed.isPosition && parsed.position) card = { type: "position", data: parsed.position };
+  else if (parsed.isPool && parsed.pool) card = { type: "pool", data: parsed.pool };
+  else if (parsed.isAction && parsed.action) card = { type: "action", data: parsed.action };
 
-  if (parsed.isQuote && parsed.quote) return { text, card: { type: "quote", data: parsed.quote } };
-  if (parsed.isPosition && parsed.position) return { text, card: { type: "position", data: parsed.position } };
-  if (parsed.isPool && parsed.pool) return { text, card: { type: "pool", data: parsed.pool } };
-  if (parsed.isAction && parsed.action) return { text, card: { type: "action", data: parsed.action } };
+  const parsedText = typeof parsed.text === "string" ? parsed.text.trim() : "";
+  const fallbackText =
+    card?.type === "quote" ? "Quote ready." :
+    card?.type === "position" ? "Position loaded." :
+    card?.type === "pool" ? "Pool status loaded." :
+    card?.type === "action" ? "Action completed." :
+    fallbackRaw;
 
-  return { text, card: null };
+  return { text: parsedText || fallbackText, card };
 }
