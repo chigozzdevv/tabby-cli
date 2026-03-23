@@ -42,7 +42,7 @@ function emptyToUndefined(value: unknown) {
 
 const envSchema = z
   .object({
-    TABBY_API_BASE_URL: z.preprocess(emptyToUndefined, z.string().url().default("https://api.tabby.cash")),
+    TABBY_API_BASE_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
     CHAIN_ID: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional()),
     RPC_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
     VAULT_MANAGER_ADDRESS: z.preprocess(emptyToUndefined, z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional()),

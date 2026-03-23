@@ -269,7 +269,10 @@ async function addTrackedVaultId(vaultId: number) {
 }
 
 function baseUrl() {
-  return ENV.TABBY_API_BASE_URL ?? "https://api.tabby.cash";
+  if (!ENV.TABBY_API_BASE_URL) {
+    throw new Error("Missing TABBY_API_BASE_URL");
+  }
+  return ENV.TABBY_API_BASE_URL;
 }
 
 async function fetchOptionalJson<T>(url: string, init?: RequestInit): Promise<T | undefined> {
