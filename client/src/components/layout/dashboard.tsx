@@ -141,8 +141,8 @@ export const Dashboard: React.FC = () => {
       <div className="border-t border-tactical-border mb-4" />
 
       <div className="tactical-grid">
-        <aside className="flex flex-col gap-3 overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
+        <aside className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="panel-header mb-0 !border-x-0 !border-t-0">
               <span>Positions</span>
               <span className="text-tactical-accent text-[9px]">{walletConnected ? positions.length : "—"}</span>
@@ -190,7 +190,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="h-[45%] min-h-[200px]">
+          <div className="min-h-[220px] shrink-0 basis-[32%] overflow-hidden">
             <ActivityFeed activities={activities} />
           </div>
         </aside>

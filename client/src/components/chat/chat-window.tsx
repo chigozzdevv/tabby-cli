@@ -54,6 +54,7 @@ const ActionCard: React.FC<{ action: { type: string; success: boolean; detail: s
 );
 
 const COLLAPSE_THRESHOLD = 400;
+const AUTO_SCROLL_THRESHOLD = 96;
 
 const MessageContent: React.FC<{ content: string; streaming?: boolean }> = ({ content, streaming }) => {
   const [expanded, setExpanded] = useState(false);
@@ -89,6 +90,14 @@ export const ChatWindow: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const streamingIdRef = useRef<string | null>(null);
   const accumulatedRef = useRef<string>("");
+  const shouldAutoScrollRef = useRef(true);
+
+  const syncAutoScrollState = () => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    shouldAutoScrollRef.current = distanceFromBottom <= AUTO_SCROLL_THRESHOLD;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -111,9 +120,13 @@ export const ChatWindow: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    const node = scrollRef.current;
+    if (!node || !shouldAutoScrollRef.current) return;
+    requestAnimationFrame(() => {
+      const nextNode = scrollRef.current;
+      if (!nextNode) return;
+      nextNode.scrollTop = nextNode.scrollHeight;
+    });
   }, [messages]);
 
   const handleSend = async (text?: string) => {
@@ -143,6 +156,7 @@ export const ChatWindow: React.FC = () => {
     setMessages(prev => [...prev, userMessage, assistantMessage]);
     setInput("");
     setPendingContext([]);
+    shouldAutoScrollRef.current = true;
     streamingIdRef.current = assistantId;
     accumulatedRef.current = "";
 
@@ -196,12 +210,12 @@ export const ChatWindow: React.FC = () => {
 
   return (
     <div
-      className="panel flex h-full flex-col relative"
+      className="panel relative flex h-full min-h-0 flex-col overflow-hidden"
       onDragOver={e => { e.preventDefault(); setIsDraggingOver(true); }}
       onDragLeave={e => { if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) setIsDraggingOver(false); }}
       onDrop={onInputDrop}
     >
-      <div className="border-b border-tactical-border px-4 py-2 flex items-center justify-between">
+      <div className="shrink-0 border-b border-tactical-border px-4 py-2 flex items-center justify-between">
         <span className="text-[9px] uppercase tracking-widest text-tactical-dim font-bold">AI Assistant</span>
         <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-wider">
           {isConnecting ? (
@@ -214,7 +228,11 @@ export const ChatWindow: React.FC = () => {
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6">
+      <div
+        ref={scrollRef}
+        onScroll={syncAutoScrollState}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6"
+      >
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full">
             <p className="text-[13px] uppercase tracking-wider text-tactical-dim mb-8">
@@ -288,7 +306,7 @@ export const ChatWindow: React.FC = () => {
         )}
       </div>
 
-      <div className={`border-t p-4 transition-colors relative ${isDraggingOver ? "border-tactical-accent bg-tactical-accent/5" : "border-tactical-border"}`}>
+      <div className={`relative shrink-0 border-t p-4 transition-colors ${isDraggingOver ? "border-tactical-accent bg-tactical-accent/5" : "border-tactical-border"}`}>
         <AnimatePresence>
           {pendingContext.length > 0 && (
             <motion.div
