@@ -23,6 +23,17 @@ contract ConfigureCollaterals is Script {
             86400,
             true
         );
+        marketConfig.setCollateralConfig(
+            vm.envAddress("COLLATERAL_0_ASSET"),
+            MarketConfig.CollateralConfig({
+                borrowLtvBps: 7000,
+                liquidationThresholdBps: 7750,
+                liquidationBonusBps: 500,
+                supplyCap: 0,
+                valueCapUsd: 0,
+                enabled: true
+            })
+        );
 
         // XAUt0 — Tether Gold
         priceOracle.setFeed(
