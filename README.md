@@ -2,7 +2,7 @@
 
 Tabby is a permissionless, overcollateralized USDT0 lending protocol on Plasma for borrowers, LPs, and autonomous agents.
 
-Borrowers open reusable vaults, lock `WETH`, `wstETH`, `XAUt0`, or `WXPL` as collateral, and borrow `USDT0` through perpetual overcollateralized positions. Liquidity providers supply `USDT0` to `DebtPool` and earn yield through pool shares. Agents can either borrow from their own vaults or operate human-owned vaults through explicit onchain permissions.
+Borrowers, human or agent, open reusable vaults, lock `WETH`, `wstETH`, `XAUt0`, or `WXPL` as collateral, and borrow `USDT0` through perpetual overcollateralized positions. Liquidity providers supply `USDT0` to `DebtPool` and earn yield through pool shares. Agents can either borrow from their own vaults or operate human-owned vaults through explicit onchain permissions.
 
 ## Demo
 
