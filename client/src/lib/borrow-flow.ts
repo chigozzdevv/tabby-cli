@@ -253,12 +253,16 @@ export async function bootstrapBorrowForOwner(params: {
 
   await ensurePlasmaChain(config.chainId);
   const { publicClient, walletClient } = getBrowserClients(config.chainId);
-  const existingVaults = await listPositions(ownerAddress);
+  const existingVaults = await listPositions(ownerAddress).catch((error: any) => {
+    throw new Error(`Failed to load existing vaults: ${error?.message ?? "unknown error"}`);
+  });
 
   let vaultId = firstExistingVault(existingVaults);
   let openedVault = false;
   if (!vaultId) {
-    vaultId = await openVault(ownerAddress, config.vaultManager, publicClient, walletClient);
+    vaultId = await openVault(ownerAddress, config.vaultManager, publicClient, walletClient).catch((error: any) => {
+      throw new Error(`Failed to open a vault from the connected wallet: ${error?.message ?? "unknown error"}`);
+    });
     openedVault = true;
   }
 
@@ -273,7 +277,9 @@ export async function bootstrapBorrowForOwner(params: {
       collateral.symbol,
       collateral.decimals,
       publicClient,
-    );
+    ).catch((error: any) => {
+      throw new Error(`Insufficient ${collateral.symbol} for the quoted collateral deposit: ${error?.message ?? "unknown error"}`);
+    });
     await ensureAllowance(
       ownerAddress,
       collateral.asset as Address,
@@ -281,7 +287,9 @@ export async function bootstrapBorrowForOwner(params: {
       amountWei,
       publicClient,
       walletClient,
-    );
+    ).catch((error: any) => {
+      throw new Error(`Failed to approve ${collateral.symbol} for the vault: ${error?.message ?? "unknown error"}`);
+    });
 
     const depositHash = await walletClient.writeContract({
       account: ownerAddress,
@@ -289,14 +297,22 @@ export async function bootstrapBorrowForOwner(params: {
       abi: vaultManagerAbi,
       functionName: "depositCollateral",
       args: [BigInt(vaultId), collateral.asset as Address, amountWei],
+    }).catch((error: any) => {
+      throw new Error(`Failed to submit the ${collateral.symbol} collateral deposit: ${error?.message ?? "unknown error"}`);
     });
-    await publicClient.waitForTransactionReceipt({ hash: depositHash, confirmations: 1 });
+    await publicClient.waitForTransactionReceipt({ hash: depositHash, confirmations: 1 }).catch((error: any) => {
+      throw new Error(`The ${collateral.symbol} collateral deposit transaction did not confirm: ${error?.message ?? "unknown error"}`);
+    });
   }
 
-  const operatorWallet = await createOperatorWallet();
+  const operatorWallet = await createOperatorWallet().catch((error: any) => {
+    throw new Error(`Failed to create or load the borrower operator wallet: ${error?.message ?? "unknown error"}`);
+  });
   const prepared = await prepareOperatorBinding({
     vaultId,
     operator: operatorWallet.address,
+  }).catch((error: any) => {
+    throw new Error(`Failed to prepare operator binding for vault #${vaultId}: ${error?.message ?? "unknown error"}`);
   });
 
   let boundOperator = prepared.currentlyBound;
@@ -306,12 +322,18 @@ export async function bootstrapBorrowForOwner(params: {
       to: prepared.transaction.to,
       data: prepared.transaction.data as Hex,
       value: BigInt(prepared.transaction.valueWei),
+    }).catch((error: any) => {
+      throw new Error(`Failed to submit the operator binding transaction: ${error?.message ?? "unknown error"}`);
     });
-    await publicClient.waitForTransactionReceipt({ hash: bindHash, confirmations: 1 });
+    await publicClient.waitForTransactionReceipt({ hash: bindHash, confirmations: 1 }).catch((error: any) => {
+      throw new Error(`The operator binding transaction did not confirm: ${error?.message ?? "unknown error"}`);
+    });
     const confirmed = await confirmOperatorBinding({
       bindingId: prepared.binding.bindingId,
       vaultId,
       operator: operatorWallet.address,
+    }).catch((error: any) => {
+      throw new Error(`Failed to confirm operator binding for vault #${vaultId}: ${error?.message ?? "unknown error"}`);
     });
     boundOperator = confirmed.bound;
   }

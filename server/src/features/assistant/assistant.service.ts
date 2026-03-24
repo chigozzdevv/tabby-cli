@@ -201,7 +201,16 @@ export async function appendAssistantMessage(input: {
 }
 
 export async function generateOperatorWallet(sessionId?: string) {
-  const wallet = await ensureBorrowerOperatorWallet();
+  let wallet: { address: `0x${string}`; created: boolean };
+  try {
+    wallet = await ensureBorrowerOperatorWallet();
+  } catch (error: any) {
+    throw new HttpError(
+      500,
+      "operator-wallet-error",
+      `failed to load or create borrower operator wallet: ${error?.message ?? "unknown error"}`,
+    );
+  }
 
   if (sessionId) {
     const db = getDb();
