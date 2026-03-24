@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Terminal, Hash, Pin, X, Wifi, WifiOff, CheckCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Send, Terminal, Hash, Pin, X, Wifi, WifiOff, CheckCircle, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import type { ContextItem } from "../sidebar/context-card";
 import { QuoteCard } from "./quote-card";
 import { PositionCard } from "./position-card";
@@ -26,12 +26,27 @@ const SUGGESTIONS = [
   "What is the current pool APY?",
 ];
 
-const ActionCard: React.FC<{ action: { type: string; success: boolean; detail: string } }> = ({ action }) => (
+const ActionCard: React.FC<{
+  action: { type: string; success: boolean; detail: string; txHash?: string; explorerUrl?: string };
+}> = ({ action }) => (
   <div className="border border-tactical-accent/30 bg-tactical-accent/5 mt-2 px-3 py-2 flex items-center gap-2 text-[11px]">
     <CheckCircle size={12} className="text-tactical-accent shrink-0" />
     <span className="font-bold uppercase text-tactical-accent">{action.type}</span>
     <span className="text-tactical-dim">—</span>
     <span>{action.detail}</span>
+    {action.explorerUrl && (
+      <a
+        href={action.explorerUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="ml-auto inline-flex items-center gap-1 text-tactical-accent hover:underline"
+      >
+        <span className="font-mono text-[10px]">
+          {action.txHash ? `${action.txHash.slice(0, 6)}...${action.txHash.slice(-4)}` : "View tx"}
+        </span>
+        <ExternalLink size={10} />
+      </a>
+    )}
   </div>
 );
 
@@ -188,7 +203,13 @@ export const ChatWindow: React.FC<{
     }
   };
 
-  const appendLocalActionMessage = (payload: { type: string; text: string; detail: string }) => {
+  const appendLocalActionMessage = (payload: {
+    type: string;
+    text: string;
+    detail: string;
+    txHash?: string;
+    explorerUrl?: string;
+  }) => {
     setMessages((prev) => [
       ...prev,
       {
@@ -201,6 +222,8 @@ export const ChatWindow: React.FC<{
             type: payload.type,
             success: true,
             detail: payload.detail,
+            txHash: payload.txHash,
+            explorerUrl: payload.explorerUrl,
           },
         },
       },

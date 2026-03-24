@@ -10,7 +10,13 @@ type PositionCardProps = {
   vault: VaultPosition;
   walletAddress: `0x${string}` | null;
   connectWallet: () => Promise<`0x${string}` | null>;
-  onActionComplete?: (payload: { type: "deposit" | "withdraw"; text: string; detail: string }) => void;
+  onActionComplete?: (payload: {
+    type: "deposit" | "withdraw";
+    text: string;
+    detail: string;
+    txHash?: string;
+    explorerUrl?: string;
+  }) => void;
 };
 
 type Mode = "deposit" | "withdraw" | null;

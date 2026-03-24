@@ -9,7 +9,13 @@ type LpPoolCardProps = {
   pool: PoolData;
   walletAddress: `0x${string}` | null;
   connectWallet: () => Promise<`0x${string}` | null>;
-  onActionComplete?: (payload: { type: "deposit"; text: string; detail: string }) => void;
+  onActionComplete?: (payload: {
+    type: "deposit";
+    text: string;
+    detail: string;
+    txHash?: string;
+    explorerUrl?: string;
+  }) => void;
 };
 
 export const LpPoolCard: React.FC<LpPoolCardProps> = ({

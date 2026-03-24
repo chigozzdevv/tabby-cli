@@ -101,7 +101,13 @@ export type BorrowBootstrapResult = {
 export type VaultOwnerActionResult = {
   text: string;
   detail: string;
+  txHash: string;
+  explorerUrl: string;
 };
+
+function plasmaTxUrl(hash: string) {
+  return `https://plasmascan.to/tx/${hash}`;
+}
 
 function requireEthereum() {
   if (!window.ethereum) {
@@ -398,6 +404,8 @@ export async function depositCollateralFromOwner(params: {
   return {
     text: `Deposited ${amountText} ${selected.asset.symbol} into vault #${params.vault.vaultId}.`,
     detail: `${amountText} ${selected.asset.symbol} deposited into vault #${params.vault.vaultId}.`,
+    txHash: hash,
+    explorerUrl: plasmaTxUrl(hash),
   };
 }
 
@@ -449,5 +457,7 @@ export async function withdrawCollateralFromOwner(params: {
   return {
     text: `Withdrew ${amountText} ${selected.asset.symbol} from vault #${params.vault.vaultId}.`,
     detail: `${amountText} ${selected.asset.symbol} withdrawn from vault #${params.vault.vaultId}.`,
+    txHash: hash,
+    explorerUrl: plasmaTxUrl(hash),
   };
 }

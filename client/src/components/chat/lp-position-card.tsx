@@ -10,7 +10,13 @@ type LpPositionCardProps = {
   position: LpPosition;
   walletAddress: `0x${string}` | null;
   connectWallet: () => Promise<`0x${string}` | null>;
-  onActionComplete?: (payload: { type: "withdraw"; text: string; detail: string }) => void;
+  onActionComplete?: (payload: {
+    type: "withdraw";
+    text: string;
+    detail: string;
+    txHash?: string;
+    explorerUrl?: string;
+  }) => void;
 };
 
 export const LpPositionCard: React.FC<LpPositionCardProps> = ({

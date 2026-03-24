@@ -100,7 +100,13 @@ declare global {
 type LpActionResult = {
   text: string;
   detail: string;
+  txHash: string;
+  explorerUrl: string;
 };
+
+function plasmaTxUrl(hash: string) {
+  return `https://plasmascan.to/tx/${hash}`;
+}
 
 function requireEthereum() {
   if (!window.ethereum) {
@@ -235,6 +241,8 @@ export async function depositLiquidityFromOwner(params: {
   return {
     text: `Deposited ${amountText} ${symbol}. You now hold ${shareText} pool shares.`,
     detail: `${amountText} ${symbol} deposited. Current shares: ${shareText}.`,
+    txHash: hash,
+    explorerUrl: plasmaTxUrl(hash),
   };
 }
 
@@ -317,5 +325,7 @@ export async function withdrawLiquidityFromOwner(params: {
   return {
     text: `Withdrew about ${assetsText} ${symbol}. Remaining shares: ${shareText}.`,
     detail: `About ${assetsText} ${symbol} withdrawn. Remaining shares: ${shareText}.`,
+    txHash: hash,
+    explorerUrl: plasmaTxUrl(hash),
   };
 }

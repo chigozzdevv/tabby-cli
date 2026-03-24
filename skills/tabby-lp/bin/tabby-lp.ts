@@ -205,7 +205,16 @@ function buildAssistantPositionResponse(position: PoolPosition) {
   };
 }
 
-function buildAssistantActionResponse(type: "deposit" | "withdraw", detail: string, text = detail) {
+function plasmaTxUrl(hash: `0x${string}`) {
+  return `https://plasmascan.to/tx/${hash}`;
+}
+
+function buildAssistantActionResponse(
+  type: "deposit" | "withdraw",
+  detail: string,
+  text = detail,
+  txHash?: `0x${string}`,
+) {
   return {
     text,
     isQuote: false,
@@ -219,6 +228,8 @@ function buildAssistantActionResponse(type: "deposit" | "withdraw", detail: stri
       type,
       success: true,
       detail,
+      txHash: txHash ?? null,
+      explorerUrl: txHash ? plasmaTxUrl(txHash) : null,
     },
   };
 }
@@ -391,6 +402,7 @@ LP Position (${position.assetSymbol}):
           "deposit",
           `${amountText} ${position.assetSymbol} deposited. Current shares: ${shareText}.`,
           `Deposited ${amountText} ${position.assetSymbol}. You now hold ${shareText} pool shares.`,
+          hash,
         ),
       );
     } else if (cmd === "withdraw-liquidity") {
@@ -496,6 +508,7 @@ LP Position (${position.assetSymbol}):
           "withdraw",
           `About ${assetsText} ${position.assetSymbol} withdrawn. Remaining shares: ${shareText}.`,
           `Withdrew about ${assetsText} ${position.assetSymbol}. Remaining shares: ${shareText}.`,
+          hash,
         ),
       );
     } else if (cmd === "monitor-pool") {

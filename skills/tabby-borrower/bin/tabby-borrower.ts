@@ -652,7 +652,16 @@ function buildAssistantVaultStatusResponse(vault: VaultSummary, debtAsset: Asset
   };
 }
 
-function buildAssistantActionResponse(type: "borrow" | "repay" | "deposit" | "withdraw" | "open-vault", detail: string, text = detail) {
+function plasmaTxUrl(hash: `0x${string}`) {
+  return `https://plasmascan.to/tx/${hash}`;
+}
+
+function buildAssistantActionResponse(
+  type: "borrow" | "repay" | "deposit" | "withdraw" | "open-vault",
+  detail: string,
+  text = detail,
+  txHash?: `0x${string}`,
+) {
   return {
     text,
     isQuote: false,
@@ -666,6 +675,8 @@ function buildAssistantActionResponse(type: "borrow" | "repay" | "deposit" | "wi
       type,
       success: true,
       detail,
+      txHash: txHash ?? null,
+      explorerUrl: txHash ? plasmaTxUrl(txHash) : null,
     },
   };
 }
@@ -917,6 +928,7 @@ async function commandAssistantOpenVault() {
       "open-vault",
       `Vault #${openedVaultId} opened.`,
       `Opened vault #${openedVaultId}.`,
+      hash,
     ),
   );
 }
@@ -993,6 +1005,7 @@ async function commandAssistantDepositCollateral() {
       "deposit",
       `${amountText} ${symbol} deposited into vault #${vaultId}.`,
       `Deposited ${amountText} ${symbol} into vault #${vaultId}.`,
+      hash,
     ),
   );
 }
@@ -1044,6 +1057,7 @@ async function commandAssistantBorrow() {
       "borrow",
       `${amountText} ${market.debtAsset.symbol} borrowed from vault #${vaultId}. Health factor ${healthFactor}.`,
       `Borrowed ${amountText} ${market.debtAsset.symbol} from vault #${vaultId}. Health factor is now ${healthFactor}.`,
+      hash,
     ),
   );
 }
@@ -1107,6 +1121,7 @@ async function commandAssistantRepay() {
       "repay",
       `${amountText} ${market.debtAsset.symbol} repaid on vault #${vaultId}. Health factor ${healthFactor}.`,
       `Repaid ${amountText} ${market.debtAsset.symbol} on vault #${vaultId}. Health factor is now ${healthFactor}.`,
+      hash,
     ),
   );
 }
@@ -1180,6 +1195,7 @@ async function commandAssistantWithdrawCollateral() {
       "withdraw",
       `${amountText} ${symbol} withdrawn from vault #${vaultId}.`,
       `Withdrew ${amountText} ${symbol} from vault #${vaultId}.`,
+      hash,
     ),
   );
 }
