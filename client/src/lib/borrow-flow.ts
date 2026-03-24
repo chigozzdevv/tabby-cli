@@ -6,7 +6,6 @@ import {
   formatUnits,
   parseUnits,
   type Address,
-  type Hex,
 } from "viem";
 
 import type { QuoteData } from "./api-client";
@@ -14,7 +13,6 @@ import {
   createOperatorWallet,
   getConfig,
   listPositions,
-  prepareOperatorBinding,
   confirmOperatorBinding,
 } from "./api-client";
 
@@ -64,6 +62,27 @@ const vaultManagerAbi = [
       { name: "vaultId", type: "uint256" },
       { name: "asset", type: "address" },
       { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "vaultOperators",
+    stateMutability: "view",
+    inputs: [
+      { name: "vaultId", type: "uint256" },
+      { name: "operator", type: "address" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "setVaultOperator",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "vaultId", type: "uint256" },
+      { name: "operator", type: "address" },
+      { name: "allowed", type: "bool" },
     ],
     outputs: [],
   },
@@ -240,6 +259,53 @@ function requireVaultOwner(ownerAddress: Address, vaultOwner: string) {
   }
 }
 
+async function isOperatorBound(
+  vaultManager: Address,
+  vaultId: number,
+  operator: Address,
+  publicClient: any,
+) {
+  return await publicClient.readContract({
+    address: vaultManager,
+    abi: vaultManagerAbi,
+    functionName: "vaultOperators",
+    args: [BigInt(vaultId), operator],
+  });
+}
+
+async function bindOperatorOnchain(params: {
+  ownerAddress: Address;
+  vaultManager: Address;
+  vaultId: number;
+  operator: Address;
+  publicClient: any;
+  walletClient: any;
+}) {
+  const alreadyBound = await isOperatorBound(
+    params.vaultManager,
+    params.vaultId,
+    params.operator,
+    params.publicClient,
+  );
+  if (alreadyBound) return true;
+
+  const hash = await params.walletClient.writeContract({
+    account: params.ownerAddress,
+    address: params.vaultManager,
+    abi: vaultManagerAbi,
+    functionName: "setVaultOperator",
+    args: [BigInt(params.vaultId), params.operator, true],
+  });
+  await params.publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
+
+  return await isOperatorBound(
+    params.vaultManager,
+    params.vaultId,
+    params.operator,
+    params.publicClient,
+  );
+}
+
 export async function bootstrapBorrowForOwner(params: {
   ownerAddress: Address;
   quote: QuoteData;
@@ -308,34 +374,22 @@ export async function bootstrapBorrowForOwner(params: {
   const operatorWallet = await createOperatorWallet().catch((error: any) => {
     throw new Error(`Failed to create or load the borrower operator wallet: ${error?.message ?? "unknown error"}`);
   });
-  const prepared = await prepareOperatorBinding({
+  let boundOperator = await bindOperatorOnchain({
+    ownerAddress,
+    vaultManager: config.vaultManager,
     vaultId,
     operator: operatorWallet.address,
+    publicClient,
+    walletClient,
   }).catch((error: any) => {
-    throw new Error(`Failed to prepare operator binding for vault #${vaultId}: ${error?.message ?? "unknown error"}`);
+    throw new Error(`Failed to bind operator ${operatorWallet.address} for vault #${vaultId}: ${error?.message ?? "unknown error"}`);
   });
 
-  let boundOperator = prepared.currentlyBound;
-  if (!boundOperator) {
-    const bindHash = await walletClient.sendTransaction({
-      account: ownerAddress,
-      to: prepared.transaction.to,
-      data: prepared.transaction.data as Hex,
-      value: BigInt(prepared.transaction.valueWei),
-    }).catch((error: any) => {
-      throw new Error(`Failed to submit the operator binding transaction: ${error?.message ?? "unknown error"}`);
-    });
-    await publicClient.waitForTransactionReceipt({ hash: bindHash, confirmations: 1 }).catch((error: any) => {
-      throw new Error(`The operator binding transaction did not confirm: ${error?.message ?? "unknown error"}`);
-    });
-    const confirmed = await confirmOperatorBinding({
-      bindingId: prepared.binding.bindingId,
+  if (boundOperator) {
+    await confirmOperatorBinding({
       vaultId,
       operator: operatorWallet.address,
-    }).catch((error: any) => {
-      throw new Error(`Failed to confirm operator binding for vault #${vaultId}: ${error?.message ?? "unknown error"}`);
-    });
-    boundOperator = confirmed.bound;
+    }).catch(() => undefined);
   }
 
   if (!boundOperator) {
