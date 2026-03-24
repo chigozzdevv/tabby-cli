@@ -188,10 +188,6 @@ export const ChatWindow: React.FC<{
     }
   };
 
-  const handleCardAction = (action: string, detail: string) => {
-    handleSend(`${action} — ${detail}`);
-  };
-
   const appendLocalActionMessage = (payload: { type: string; text: string; detail: string }) => {
     setMessages((prev) => [
       ...prev,
@@ -330,7 +326,9 @@ export const ChatWindow: React.FC<{
                     {!msg.streaming && msg.card?.type === "position" && (
                       <PositionCard
                         vault={msg.card.data as VaultPosition}
-                        onAction={(action, vaultId) => handleCardAction(action, `vault #${vaultId}`)}
+                        walletAddress={walletAddress}
+                        connectWallet={connectWallet}
+                        onActionComplete={appendLocalActionMessage}
                       />
                     )}
                     {!msg.streaming && msg.card?.type === "lp-position" && (

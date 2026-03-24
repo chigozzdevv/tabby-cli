@@ -50,7 +50,7 @@ export type VaultPosition = {
   healthFactorE18: string;
   currentBorrowRateBps: number;
   collaterals: {
-    asset: { symbol: string; decimals: number; priceUsd: string };
+    asset: { address: string; symbol: string; decimals: number; priceUsd: string };
     balanceWei: string;
     valueUsd: string;
   }[];

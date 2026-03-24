@@ -4,6 +4,7 @@ import {
   custom,
   decodeEventLog,
   formatUnits,
+  parseUnits,
   type Address,
   type Hex,
 } from "viem";
@@ -67,6 +68,18 @@ const vaultManagerAbi = [
     outputs: [],
   },
   {
+    type: "function",
+    name: "withdrawCollateral",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "vaultId", type: "uint256" },
+      { name: "asset", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "to", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
     type: "event",
     name: "VaultOpened",
     inputs: [
@@ -83,6 +96,11 @@ export type BorrowBootstrapResult = {
   openedVault: boolean;
   depositedCollateral: boolean;
   boundOperator: boolean;
+};
+
+export type VaultOwnerActionResult = {
+  text: string;
+  detail: string;
 };
 
 function requireEthereum() {
@@ -210,6 +228,12 @@ function firstExistingVault(ownerVaults: Awaited<ReturnType<typeof listPositions
   return ownerVaults[0]?.vaultId;
 }
 
+function requireVaultOwner(ownerAddress: Address, vaultOwner: string) {
+  if (ownerAddress.toLowerCase() !== vaultOwner.toLowerCase()) {
+    throw new Error("Connected wallet is not the owner of this vault.");
+  }
+}
+
 export async function bootstrapBorrowForOwner(params: {
   ownerAddress: Address;
   quote: QuoteData;
@@ -309,4 +333,121 @@ export function buildBorrowExecutionPrompt(params: {
 }) {
   const amount = formatUnits(BigInt(params.amountWei), params.quote.debtAsset.decimals);
   return `Borrow ${amount} ${params.quote.debtAsset.symbol} from vault #${params.vaultId} to ${params.ownerAddress}. The owner already opened the vault, deposited the quoted collateral, and bound operator ${params.operatorAddress}. Run the borrow directly now.`;
+}
+
+export async function depositCollateralFromOwner(params: {
+  ownerAddress: Address;
+  vault: {
+    vaultId: number;
+    owner: string;
+    collaterals: {
+      asset: { address: string; symbol: string; decimals: number };
+    }[];
+  };
+  assetAddress: Address;
+  amount: string;
+}): Promise<VaultOwnerActionResult> {
+  const config = await getConfig();
+  if (!config) {
+    throw new Error("Tabby config is unavailable right now.");
+  }
+
+  requireVaultOwner(params.ownerAddress, params.vault.owner);
+  await ensurePlasmaChain(config.chainId);
+  const { publicClient, walletClient } = getBrowserClients(config.chainId);
+
+  const selected = params.vault.collaterals.find(
+    (item) => item.asset.address.toLowerCase() === params.assetAddress.toLowerCase(),
+  );
+  if (!selected) {
+    throw new Error("Selected collateral asset is not available on this vault card.");
+  }
+
+  const amountWei = parseUnits(params.amount || "0", selected.asset.decimals);
+  if (amountWei <= 0n) {
+    throw new Error("Enter a collateral amount greater than zero.");
+  }
+
+  await ensureCollateralBalance(
+    params.ownerAddress,
+    params.assetAddress,
+    amountWei,
+    selected.asset.symbol,
+    selected.asset.decimals,
+    publicClient,
+  );
+  await ensureAllowance(
+    params.ownerAddress,
+    params.assetAddress,
+    config.vaultManager,
+    amountWei,
+    publicClient,
+    walletClient,
+  );
+
+  const hash = await walletClient.writeContract({
+    account: params.ownerAddress,
+    address: config.vaultManager,
+    abi: vaultManagerAbi,
+    functionName: "depositCollateral",
+    args: [BigInt(params.vault.vaultId), params.assetAddress, amountWei],
+  });
+  await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
+
+  const amountText = formatUnits(amountWei, selected.asset.decimals);
+  return {
+    text: `Deposited ${amountText} ${selected.asset.symbol} into vault #${params.vault.vaultId}.`,
+    detail: `${amountText} ${selected.asset.symbol} deposited into vault #${params.vault.vaultId}.`,
+  };
+}
+
+export async function withdrawCollateralFromOwner(params: {
+  ownerAddress: Address;
+  vault: {
+    vaultId: number;
+    owner: string;
+    collaterals: {
+      asset: { address: string; symbol: string; decimals: number };
+      balanceWei: string;
+    }[];
+  };
+  assetAddress: Address;
+  amountWei: bigint;
+}): Promise<VaultOwnerActionResult> {
+  const config = await getConfig();
+  if (!config) {
+    throw new Error("Tabby config is unavailable right now.");
+  }
+
+  requireVaultOwner(params.ownerAddress, params.vault.owner);
+  await ensurePlasmaChain(config.chainId);
+  const { publicClient, walletClient } = getBrowserClients(config.chainId);
+
+  const selected = params.vault.collaterals.find(
+    (item) => item.asset.address.toLowerCase() === params.assetAddress.toLowerCase(),
+  );
+  if (!selected) {
+    throw new Error("Selected collateral asset is not available on this vault.");
+  }
+  if (params.amountWei <= 0n) {
+    throw new Error("Enter a withdrawal amount greater than zero.");
+  }
+  if (BigInt(selected.balanceWei) < params.amountWei) {
+    throw new Error("Withdrawal amount exceeds collateral balance.");
+  }
+
+  const hash = await walletClient.writeContract({
+    account: params.ownerAddress,
+    address: config.vaultManager,
+    abi: vaultManagerAbi,
+    functionName: "withdrawCollateral",
+    args: [BigInt(params.vault.vaultId), params.assetAddress, params.amountWei, params.ownerAddress],
+  });
+  await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
+
+  const amountText = formatUnits(params.amountWei, selected.asset.decimals);
+  return {
+    text: `Withdrew ${amountText} ${selected.asset.symbol} from vault #${params.vault.vaultId}.`,
+    detail: `${amountText} ${selected.asset.symbol} withdrawn from vault #${params.vault.vaultId}.`,
+  };
 }
