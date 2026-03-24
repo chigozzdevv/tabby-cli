@@ -27,7 +27,7 @@ export const PositionCard: React.FC<PositionCardProps> = ({
   connectWallet,
   onActionComplete,
 }) => {
-  const hf = formatHealthFactor(vault.healthFactorE18);
+  const hf = formatHealthFactor(vault.healthFactorE18, { debtWei: vault.debtWei });
   const [mode, setMode] = useState<Mode>(null);
   const [assetAddress, setAssetAddress] = useState(vault.collaterals[0]?.asset.address ?? "");
   const [depositAmount, setDepositAmount] = useState("");
@@ -134,7 +134,7 @@ export const PositionCard: React.FC<PositionCardProps> = ({
         </div>
         <div className="flex items-center gap-1 text-[10px] font-bold" style={{ color: hf.color }}>
           <Shield size={10} />
-          HF {hf.value}
+          {hf.value === "No debt" ? hf.value : `HF ${hf.value}`}
         </div>
       </div>
 

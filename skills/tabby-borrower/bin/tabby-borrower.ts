@@ -564,6 +564,11 @@ function formatHealthFactor(hf: bigint) {
     return (Number(hf) / 10**18).toFixed(2);
 }
 
+function formatVaultHealthFactor(vault: Pick<VaultSummary, "debtWei" | "healthFactorE18">) {
+  if (BigInt(vault.debtWei) === 0n) return "no debt";
+  return formatHealthFactor(BigInt(vault.healthFactorE18));
+}
+
 function formatDisplayAmount(value: bigint | string, decimals: number) {
   const normalized = Number(formatUnits(typeof value === "string" ? BigInt(value) : value, decimals));
   if (!Number.isFinite(normalized)) {
@@ -634,7 +639,10 @@ function buildAssistantQuoteResponse(quote: BorrowPreflightQuote) {
 function buildAssistantVaultStatusText(vault: VaultSummary, debtAsset: AssetSnapshot) {
   const debtAmount = formatDisplayAmount(vault.debtWei, debtAsset.decimals);
   const collateralValueUsd = formatUsd(BigInt(vault.collateralValueUsd));
-  const healthFactor = formatHealthFactor(BigInt(vault.healthFactorE18));
+  if (BigInt(vault.debtWei) === 0n) {
+    return `Vault #${vault.vaultId} has no debt and about $${collateralValueUsd} of collateral value.`;
+  }
+  const healthFactor = formatVaultHealthFactor(vault);
   return `Vault #${vault.vaultId} has ${debtAmount} ${debtAsset.symbol} debt, about $${collateralValueUsd} of collateral value, and a health factor of ${healthFactor}.`;
 }
 
@@ -701,7 +709,7 @@ function printVaultSummary(vault: VaultSummary, debtAsset: AssetSnapshot) {
   console.log(`Vault ${vault.vaultId} (Owner: ${vault.owner})`);
   console.log(`Debt: ${formatAmount(BigInt(vault.debtWei), debtAsset.decimals)} ${debtAsset.symbol} (~$${formatUsd(BigInt(vault.debtValueUsd))})`);
   console.log(`Collateral value: ~$${formatUsd(BigInt(vault.collateralValueUsd))}`);
-  console.log(`Health factor: ${formatHealthFactor(BigInt(vault.healthFactorE18))}`);
+  console.log(`Health factor: ${formatVaultHealthFactor(vault)}`);
 }
 
 function getArg(name: string) {
@@ -1050,7 +1058,7 @@ async function commandAssistantBorrow() {
 
   const vault = await fetchVaultSummary(protocol, vaultId);
   const amountText = formatDisplayAmount(amount, market.debtAsset.decimals);
-  const healthFactor = formatHealthFactor(BigInt(vault.healthFactorE18));
+  const healthFactor = formatVaultHealthFactor(vault);
 
   printJson(
     buildAssistantActionResponse(
@@ -1114,7 +1122,18 @@ async function commandAssistantRepay() {
 
   const vault = await fetchVaultSummary(protocol, vaultId);
   const amountText = formatDisplayAmount(amount, market.debtAsset.decimals);
-  const healthFactor = formatHealthFactor(BigInt(vault.healthFactorE18));
+  const healthFactor = formatVaultHealthFactor(vault);
+  if (BigInt(vault.debtWei) === 0n) {
+    printJson(
+      buildAssistantActionResponse(
+        "repay",
+        `${amountText} ${market.debtAsset.symbol} repaid on vault #${vaultId}. The vault is now debt-free.`,
+        `Repaid ${amountText} ${market.debtAsset.symbol} on vault #${vaultId}. The vault is now debt-free.`,
+        hash,
+      ),
+    );
+    return;
+  }
 
   printJson(
     buildAssistantActionResponse(

@@ -19,7 +19,14 @@ export const vaultManagerAbi = [
   { type: "function", name: "collateralBalances", stateMutability: "view", inputs: [{ name: "vaultId", type: "uint256" }, { name: "asset", type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "vaultOperators", stateMutability: "view", inputs: [{ name: "vaultId", type: "uint256" }, { name: "operator", type: "address" }], outputs: [{ type: "bool" }] },
   { type: "function", name: "setVaultOperator", stateMutability: "nonpayable", inputs: [{ name: "vaultId", type: "uint256" }, { name: "operator", type: "address" }, { name: "allowed", type: "bool" }], outputs: [] },
+  { type: "function", name: "openVault", stateMutability: "nonpayable", inputs: [], outputs: [{ name: "vaultId", type: "uint256" }] },
+  { type: "function", name: "depositCollateral", stateMutability: "nonpayable", inputs: [{ name: "vaultId", type: "uint256" }, { name: "asset", type: "address" }, { name: "amount", type: "uint256" }], outputs: [] },
+  { type: "function", name: "withdrawCollateral", stateMutability: "nonpayable", inputs: [{ name: "vaultId", type: "uint256" }, { name: "asset", type: "address" }, { name: "amount", type: "uint256" }, { name: "to", type: "address" }], outputs: [] },
+  { type: "function", name: "borrow", stateMutability: "nonpayable", inputs: [{ name: "vaultId", type: "uint256" }, { name: "amount", type: "uint256" }, { name: "receiver", type: "address" }], outputs: [{ name: "normalizedDebtAdded", type: "uint256" }, { name: "borrowRateBps", type: "uint256" }] },
+  { type: "function", name: "repay", stateMutability: "nonpayable", inputs: [{ name: "vaultId", type: "uint256" }, { name: "maxAmount", type: "uint256" }], outputs: [{ name: "repaid", type: "uint256" }, { name: "normalizedDebtRepaid", type: "uint256" }, { name: "remainingDebt", type: "uint256" }] },
+  { type: "function", name: "liquidate", stateMutability: "nonpayable", inputs: [{ name: "vaultId", type: "uint256" }, { name: "collateralAsset", type: "address" }, { name: "maxRepayAmount", type: "uint256" }], outputs: [{ name: "repaid", type: "uint256" }, { name: "normalizedDebtRepaid", type: "uint256" }, { name: "seized", type: "uint256" }] },
   { type: "function", name: "walletRegistry", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "event", name: "VaultOpened", inputs: [{ indexed: true, name: "vaultId", type: "uint256" }, { indexed: true, name: "owner", type: "address" }], anonymous: false },
 ] as const;
 
 export const debtPoolAbi = [

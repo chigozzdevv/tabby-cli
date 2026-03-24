@@ -223,7 +223,13 @@ export function formatAmount(weiStr: string, decimals: number): string {
   return val.toFixed(val < 1 ? 4 : 2);
 }
 
-export function formatHealthFactor(hfE18: string): { value: string; color: string } {
+export function formatHealthFactor(
+  hfE18: string,
+  options?: { debtWei?: string },
+): { value: string; color: string } {
+  if (options?.debtWei !== undefined && BigInt(options.debtWei) === 0n) {
+    return { value: "No debt", color: "#28c840" };
+  }
   const hf = Number(BigInt(hfE18)) / 1e18;
   const value = hf > 100 ? "∞" : hf.toFixed(2);
   const color = hf >= 2 ? "#28c840" : hf >= 1.2 ? "#febc2e" : "#ff4444";

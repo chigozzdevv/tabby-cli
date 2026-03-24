@@ -164,7 +164,7 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({ quote, onAccept }) => {
           ) : (
             <div className="flex items-center gap-2 text-tactical-accent text-[11px] py-2">
               <Check size={14} />
-              <span className="font-bold uppercase">Vault prepared. Borrow request sent for {formatAmount(selectedAmount.toString(), decimals)} {quote.debtAsset.symbol}</span>
+              <span className="font-bold uppercase">Vault prepared. Borrow execution requested for {formatAmount(selectedAmount.toString(), decimals)} {quote.debtAsset.symbol}</span>
             </div>
           )}
         </div>

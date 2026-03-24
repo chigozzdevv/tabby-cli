@@ -18,7 +18,7 @@ const FILTERS: { key: FilterType; label: string }[] = [
 ];
 
 function vaultToCard(v: VaultPosition): ContextItem {
-  const hf = formatHealthFactor(v.healthFactorE18);
+  const hf = formatHealthFactor(v.healthFactorE18, { debtWei: v.debtWei });
   return {
     id: `vault-${v.vaultId}`,
     type: "vault",
