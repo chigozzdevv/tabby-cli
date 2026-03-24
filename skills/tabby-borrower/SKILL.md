@@ -51,10 +51,12 @@ For agent-owned vaults the skill wallet itself opens and owns the vault.
 - `quote-borrow` accepts a collateral symbol or collateral address
 - examples: `WETH:2`, `wstETH:1.5`, `0x9895D81bB462A195b4922ED7De0e3ACD007c32CB:2`
 - amounts are human-readable token amounts, not wei
+- quote outputs contain both USD values and raw debt-asset wei fields; `USDT0` uses 6 decimals
 
 ## Execution Rules
 
 - For any question about borrowing power, LTV, or "what can my collateral get me", run `quote-borrow` first and answer from that result.
+- For any quote response, always set `isQuote = true` and include the full raw `quote` payload.
 - Run the allowlisted wrapper directly: `/home/tabby/bin/tabby-borrower.sh ...`
 - Do not ask permission to run allowlisted Tabby borrower commands.
 - Do not print shell commands to the user unless they explicitly ask for the command.
@@ -63,6 +65,10 @@ For agent-owned vaults the skill wallet itself opens and owns the vault.
 - Do not offer manual estimates, price assumptions, A/B choices, or "I can do this two ways" when `quote-borrow` is available.
 - Do not claim you lack market-price access. `quote-borrow` already uses the live Tabby market data and protocol pricing exposed by the Tabby API.
 - If `quote-borrow` succeeds, return the quote directly and set `isQuote = true`.
+- Never report raw `*_Wei` fields as whole token amounts. Convert every debt amount using `quote.debtAsset.decimals`.
+- For `USDT0`, `21643` wei means `0.021643 USDT0`, not `21,643 USDT0`.
+- `maxAdditionalBorrowWei`, `poolAvailableLiquidityWei`, and `suggestedRangeWei.*` are raw debt-asset wei fields and must be formatted with decimals before writing `text`.
+- If the quote payload says `maxAdditionalBorrowWei = "21643"` and debt decimals are `6`, say `0.021643 USDT0` or a rounded equivalent, not `21,643 USDT0`.
 - If `quote-borrow` fails, return the actual command error briefly in `text`. Do not say "no usable output" unless the command truly returned no stdout and no stderr.
 - Do not ask the user to choose between retrying and an estimate unless they explicitly ask for an estimate.
 
