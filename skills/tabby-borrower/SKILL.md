@@ -52,6 +52,7 @@ For agent-owned vaults the skill wallet itself opens and owns the vault.
 - examples: `WETH:2`, `wstETH:1.5`, `0x9895D81bB462A195b4922ED7De0e3ACD007c32CB:2`
 - amounts are human-readable token amounts, not wei
 - quote outputs contain both USD values and raw debt-asset wei fields; `USDT0` uses 6 decimals
+- `*_Usd` fields are 18-decimal fixed-point USD values, not human-readable dollar strings
 
 ## Execution Rules
 
@@ -69,6 +70,14 @@ For agent-owned vaults the skill wallet itself opens and owns the vault.
 - For `USDT0`, `21643` wei means `0.021643 USDT0`, not `21,643 USDT0`.
 - `maxAdditionalBorrowWei`, `poolAvailableLiquidityWei`, and `suggestedRangeWei.*` are raw debt-asset wei fields and must be formatted with decimals before writing `text`.
 - If the quote payload says `maxAdditionalBorrowWei = "21643"` and debt decimals are `6`, say `0.021643 USDT0` or a rounded equivalent, not `21,643 USDT0`.
+- Never print raw `requestedCollateralValueUsd`, `totalBorrowCapacityUsd`, `maxAdditionalBorrowUsd`, or any other `*_Usd` field directly. Those are fixed-point USD values with 18 decimals.
+- If you mention USD values in `text`, convert them into normal dollar amounts first. Example: `21797244000000000` in a `*_Usd` field means about `$0.0218`, not `21,797,244,000,000,000`.
+- Prefer this rule for quote text:
+  - primary borrow amount: format `quote.totals.maxAdditionalBorrowWei` with `quote.debtAsset.decimals`
+  - liquidity amount: format `quote.totals.poolAvailableLiquidityWei` with `quote.debtAsset.decimals`
+  - LTV: use `borrowLtvBps`
+  - optional collateral USD: convert `requestedCollateralValueUsd` to normal dollars before displaying
+- Do not say "raw", "wei", or "fixed-point" to the user unless they explicitly ask for machine values.
 - If `quote-borrow` fails, return the actual command error briefly in `text`. Do not say "no usable output" unless the command truly returned no stdout and no stderr.
 - Do not ask the user to choose between retrying and an estimate unless they explicitly ask for an estimate.
 
