@@ -4,10 +4,11 @@ import { Send, Terminal, Hash, Pin, X, Wifi, WifiOff, CheckCircle, ChevronDown, 
 import type { ContextItem } from "../sidebar/context-card";
 import { QuoteCard } from "./quote-card";
 import { PositionCard } from "./position-card";
+import { LpPoolCard } from "./lp-pool-card";
+import { LpPositionCard } from "./lp-position-card";
 import { openClawClient, extractStreamingText, parseResponse } from "../../lib/openclaw-client";
 import type { TabbyCard } from "../../lib/openclaw-client";
-import type { QuoteData, VaultPosition, PoolData } from "../../lib/api-client";
-import { formatBps, formatUsd } from "../../lib/api-client";
+import type { QuoteData, VaultPosition, LpPosition } from "../../lib/api-client";
 import { bootstrapBorrowForOwner, buildBorrowExecutionPrompt } from "../../lib/borrow-flow";
 
 export interface Message {
@@ -24,26 +25,6 @@ const SUGGESTIONS = [
   "Show my vault positions",
   "What is the current pool APY?",
 ];
-
-const PoolCard: React.FC<{ pool: PoolData }> = ({ pool }) => (
-  <div className="border border-tactical-border bg-tactical-surface mt-2">
-    <div className="border-b border-tactical-border px-3 py-2 text-[10px] text-tactical-accent uppercase font-bold tracking-wider">
-      Pool Status
-    </div>
-    <div className="p-3 grid grid-cols-2 gap-x-6 gap-y-2 text-[11px]">
-      <div className="text-[#888]">Asset</div>
-      <div className="font-bold">{pool.assetSymbol}</div>
-      <div className="text-[#888]">TVL</div>
-      <div className="font-bold">{formatUsd(pool.totalAssetsWei, pool.assetDecimals)}</div>
-      <div className="text-[#888]">Available</div>
-      <div className="font-bold">{formatUsd(pool.availableLiquidityWei, pool.assetDecimals)}</div>
-      <div className="text-[#888]">Utilization</div>
-      <div className="font-bold">{formatBps(pool.utilizationBps)}</div>
-      <div className="text-[#888]">Borrow Rate</div>
-      <div className="font-bold">{formatBps(pool.currentBorrowRateBps)}</div>
-    </div>
-  </div>
-);
 
 const ActionCard: React.FC<{ action: { type: string; success: boolean; detail: string } }> = ({ action }) => (
   <div className="border border-tactical-accent/30 bg-tactical-accent/5 mt-2 px-3 py-2 flex items-center gap-2 text-[11px]">
@@ -211,6 +192,26 @@ export const ChatWindow: React.FC<{
     handleSend(`${action} — ${detail}`);
   };
 
+  const appendLocalActionMessage = (payload: { type: string; text: string; detail: string }) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: payload.text,
+        card: {
+          type: "action",
+          data: {
+            type: payload.type,
+            success: true,
+            detail: payload.detail,
+          },
+        },
+      },
+    ]);
+    shouldAutoScrollRef.current = true;
+  };
+
   const handleQuoteAccept = async ({ amountWei, quote }: { amountWei: string; quote: QuoteData }) => {
     const ownerAddress = walletAddress ?? (await connectWallet());
     if (!ownerAddress) {
@@ -332,8 +333,21 @@ export const ChatWindow: React.FC<{
                         onAction={(action, vaultId) => handleCardAction(action, `vault #${vaultId}`)}
                       />
                     )}
+                    {!msg.streaming && msg.card?.type === "lp-position" && (
+                      <LpPositionCard
+                        position={msg.card.data as LpPosition}
+                        walletAddress={walletAddress}
+                        connectWallet={connectWallet}
+                        onActionComplete={appendLocalActionMessage}
+                      />
+                    )}
                     {!msg.streaming && msg.card?.type === "pool" && (
-                      <PoolCard pool={msg.card.data as PoolData} />
+                      <LpPoolCard
+                        pool={msg.card.data}
+                        walletAddress={walletAddress}
+                        connectWallet={connectWallet}
+                        onActionComplete={appendLocalActionMessage}
+                      />
                     )}
                     {!msg.streaming && msg.card?.type === "action" && (
                       <ActionCard action={msg.card.data} />

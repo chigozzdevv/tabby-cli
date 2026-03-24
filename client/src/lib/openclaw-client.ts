@@ -266,7 +266,7 @@ class OpenClawClient {
 
 export const openClawClient = new OpenClawClient();
 
-export type TabbyCardType = "quote" | "position" | "pool" | "action";
+export type TabbyCardType = "quote" | "position" | "lp-position" | "pool" | "action";
 
 export type TabbyCard = { type: TabbyCardType; data: any };
 
@@ -309,10 +309,22 @@ export function parseResponse(raw: string): { text: string; card: TabbyCard | nu
   if (!parsed) return { text: fallbackRaw, card: null };
 
   let card: TabbyCard | null = null;
-  if (parsed.isQuote && parsed.quote) card = { type: "quote", data: parsed.quote };
-  else if (parsed.isPosition && parsed.position) card = { type: "position", data: parsed.position };
-  else if (parsed.isPool && parsed.pool) card = { type: "pool", data: parsed.pool };
-  else if (parsed.isAction && parsed.action) card = { type: "action", data: parsed.action };
+  if (parsed.isQuote && parsed.quote) {
+    card = { type: "quote", data: parsed.quote };
+  } else if (parsed.isPosition && parsed.position) {
+    const position = parsed.position as Record<string, unknown>;
+    if (typeof position.vaultId === "number") {
+      card = { type: "position", data: parsed.position };
+    } else if ("shares" in position) {
+      card = { type: "lp-position", data: parsed.position };
+    } else {
+      card = { type: "position", data: parsed.position };
+    }
+  } else if (parsed.isPool && parsed.pool) {
+    card = { type: "pool", data: parsed.pool };
+  } else if (parsed.isAction && parsed.action) {
+    card = { type: "action", data: parsed.action };
+  }
 
   let parsedText = typeof parsed.text === "string" ? parsed.text.trim() : "";
   if (card?.type === "quote") {
@@ -323,6 +335,7 @@ export function parseResponse(raw: string): { text: string; card: TabbyCard | nu
   const fallbackText =
     card?.type === "quote" ? "Quote ready." :
     card?.type === "position" ? "Position loaded." :
+    card?.type === "lp-position" ? "LP position loaded." :
     card?.type === "pool" ? "Pool status loaded." :
     card?.type === "action" ? "Action completed." :
     fallbackRaw;
