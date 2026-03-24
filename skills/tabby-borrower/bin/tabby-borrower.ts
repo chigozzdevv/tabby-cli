@@ -631,6 +631,27 @@ function buildAssistantQuoteResponse(quote: BorrowPreflightQuote) {
   };
 }
 
+function buildAssistantVaultStatusText(vault: VaultSummary, debtAsset: AssetSnapshot) {
+  const debtAmount = formatDisplayAmount(vault.debtWei, debtAsset.decimals);
+  const collateralValueUsd = formatUsd(BigInt(vault.collateralValueUsd));
+  const healthFactor = formatHealthFactor(BigInt(vault.healthFactorE18));
+  return `Vault #${vault.vaultId} has ${debtAmount} ${debtAsset.symbol} debt, about $${collateralValueUsd} of collateral value, and a health factor of ${healthFactor}.`;
+}
+
+function buildAssistantVaultStatusResponse(vault: VaultSummary, debtAsset: AssetSnapshot) {
+  return {
+    text: buildAssistantVaultStatusText(vault, debtAsset),
+    isQuote: false,
+    isPosition: true,
+    isPool: false,
+    isAction: false,
+    quote: null,
+    position: vault,
+    pool: null,
+    action: null,
+  };
+}
+
 function printMarketSummary(market: MarketOverview) {
   console.log(`Debt asset: ${market.debtAsset.symbol} (${market.debtAsset.address})`);
   console.log(`Pool: ${market.debtPool}`);
@@ -993,6 +1014,14 @@ async function commandVaultStatus() {
   printVaultSummary(vault, market.debtAsset);
 }
 
+async function commandAssistantVaultStatus() {
+  const protocol = await resolveProtocolConfig();
+  const market = await fetchMarketOverview(protocol);
+  const vaultId = Number(requireArg("--vault-id"));
+  const vault = await fetchVaultSummary(protocol, vaultId);
+  printJson(buildAssistantVaultStatusResponse(vault, market.debtAsset));
+}
+
 async function commandMonitorVaults() {
   const protocol = await resolveProtocolConfig();
   const state = await tryLoadState();
@@ -1127,6 +1156,7 @@ Commands:
   repay --vault-id <id> --amount <n|all>
   withdraw-collateral --vault-id <id> --amount <n|all> [--asset <addr>] [--to <addr>]
   vault-status --vault-id <id> [--json]
+  assistant-vault-status --vault-id <id>
   monitor-vaults [--json]
   liquidate --vault-id <id> --amount <n> [--asset <addr>]
   prepare-bind-operator --vault-id <id>
@@ -1150,6 +1180,7 @@ async function main() {
     case "repay": await commandRepay(); break;
     case "withdraw-collateral": await commandWithdrawCollateral(); break;
     case "vault-status": await commandVaultStatus(); break;
+    case "assistant-vault-status": await commandAssistantVaultStatus(); break;
     case "monitor-vaults": await commandMonitorVaults(); break;
     case "liquidate": await commandLiquidate(); break;
     case "prepare-bind-operator": await commandPrepareBindOperator(); break;

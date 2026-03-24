@@ -67,6 +67,16 @@ function printJson(value: unknown) {
   console.log(JSON.stringify(value, null, 2));
 }
 
+function formatDisplayAmount(value: bigint | string, decimals: number) {
+  const normalized = Number(formatUnits(typeof value === "string" ? BigInt(value) : value, decimals));
+  if (!Number.isFinite(normalized)) {
+    return formatUnits(typeof value === "string" ? BigInt(value) : value, decimals);
+  }
+  if (normalized >= 1_000_000) return `${(normalized / 1_000_000).toFixed(2)}M`;
+  if (normalized >= 1_000) return `${(normalized / 1_000).toFixed(1)}K`;
+  return normalized.toFixed(normalized < 1 ? 4 : 2);
+}
+
 function getArg(name: string) {
   const idx = process.argv.indexOf(name);
   return idx >= 0 ? process.argv[idx + 1] : undefined;
@@ -155,12 +165,42 @@ tabby-lp <command>
 Commands:
   init-wallet [--force]
   pool-status [--json]
+  assistant-pool-status
   position [--json]
+  assistant-position
   approve-asset --amount <n>
   deposit-liquidity --amount <n>
   withdraw-liquidity [--amount <n> | --shares <n> | --all]
   monitor-pool
 `);
+}
+
+function buildAssistantPoolResponse(overview: PoolOverview) {
+  return {
+    text: `The pool has ${formatDisplayAmount(overview.totalAssetsWei, overview.assetDecimals)} ${overview.assetSymbol} total assets, ${formatDisplayAmount(overview.availableLiquidityWei, overview.assetDecimals)} ${overview.assetSymbol} available, ${(overview.utilizationBps / 100).toFixed(2)}% utilization, and a ${(overview.supplyApyBps / 100).toFixed(2)}% estimated supply APY.`,
+    isQuote: false,
+    isPosition: false,
+    isPool: true,
+    isAction: false,
+    quote: null,
+    position: null,
+    pool: overview,
+    action: null,
+  };
+}
+
+function buildAssistantPositionResponse(position: PoolPosition) {
+  return {
+    text: `You hold ${formatDisplayAmount(position.shares, position.assetDecimals)} pool shares worth about ${formatDisplayAmount(position.estimatedAssetsWei, position.assetDecimals)} ${position.assetSymbol}.`,
+    isQuote: false,
+    isPosition: true,
+    isPool: false,
+    isAction: false,
+    quote: null,
+    position,
+    pool: null,
+    action: null,
+  };
 }
 
 async function main() {
@@ -202,6 +242,9 @@ Pool Status (${overview.assetSymbol}):
   Supply APY: ${(overview.supplyApyBps / 100).toFixed(2)}% (est.)
 `);
       }
+    } else if (cmd === "assistant-pool-status") {
+      const overview = await getPoolOverview(publicClient, protocol);
+      printJson(buildAssistantPoolResponse(overview));
     } else if (cmd === "position") {
       const wallet = await loadWallet();
       const position = await getPoolPosition(publicClient, protocol, wallet.address);
@@ -214,6 +257,10 @@ LP Position (${position.assetSymbol}):
   Estimated Assets: ${formatUnits(BigInt(position.estimatedAssetsWei), position.assetDecimals)} ${position.assetSymbol}
 `);
       }
+    } else if (cmd === "assistant-position") {
+      const wallet = await loadWallet();
+      const position = await getPoolPosition(publicClient, protocol, wallet.address);
+      printJson(buildAssistantPositionResponse(position));
     } else if (cmd === "approve-asset") {
       const amountStr = getArg("--amount");
       if (!amountStr) throw new Error("Missing --amount");
