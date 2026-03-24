@@ -170,7 +170,9 @@ Commands:
   assistant-position
   approve-asset --amount <n>
   deposit-liquidity --amount <n>
+  assistant-deposit-liquidity --amount <n>
   withdraw-liquidity [--amount <n> | --shares <n> | --all]
+  assistant-withdraw-liquidity [--amount <n> | --shares <n> | --all]
   monitor-pool
 `);
 }
@@ -200,6 +202,24 @@ function buildAssistantPositionResponse(position: PoolPosition) {
     position,
     pool: null,
     action: null,
+  };
+}
+
+function buildAssistantActionResponse(type: "deposit" | "withdraw", detail: string, text = detail) {
+  return {
+    text,
+    isQuote: false,
+    isPosition: false,
+    isPool: false,
+    isAction: true,
+    quote: null,
+    position: null,
+    pool: null,
+    action: {
+      type,
+      success: true,
+      detail,
+    },
   };
 }
 
@@ -340,6 +360,39 @@ LP Position (${position.assetSymbol}):
         previewShares: previewShares.toString(),
         approvalTxHash,
       });
+    } else if (cmd === "assistant-deposit-liquidity") {
+      const amountStr = getArg("--amount");
+      if (!amountStr) throw new Error("Missing --amount");
+      const wallet = await loadWallet();
+      const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
+
+      const decimals = await publicClient.readContract({ address: protocol.debtAsset, abi: erc20Abi, functionName: "decimals" });
+      const amount = parseUnits(amountStr, Number(decimals));
+
+      const allowance = await publicClient.readContract({ address: protocol.debtAsset, abi: erc20Abi, functionName: "allowance", args: [wallet.address, protocol.debtPool] });
+      if (allowance < amount) {
+        const approvalTxHash = await walletClient.writeContract({
+          address: protocol.debtAsset,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [protocol.debtPool, maxUint256],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: approvalTxHash });
+      }
+
+      const hash = await walletClient.writeContract({ address: protocol.debtPool, abi: debtPoolAbi, functionName: "deposit", args: [amount] });
+      await publicClient.waitForTransactionReceipt({ hash });
+      const position = await getPoolPosition(publicClient, protocol, wallet.address);
+      const amountText = formatDisplayAmount(amount, Number(decimals));
+      const shareText = formatDisplayAmount(position.shares, position.assetDecimals);
+
+      printJson(
+        buildAssistantActionResponse(
+          "deposit",
+          `${amountText} ${position.assetSymbol} deposited. Current shares: ${shareText}.`,
+          `Deposited ${amountText} ${position.assetSymbol}. You now hold ${shareText} pool shares.`,
+        ),
+      );
     } else if (cmd === "withdraw-liquidity") {
       const sharesStr = getArg("--shares");
       const amountStr = getArg("--amount");
@@ -391,6 +444,60 @@ LP Position (${position.assetSymbol}):
         requestedAmountWei: amountStr ? parseUnits(amountStr, Number(decimals)).toString() : undefined,
         all: isAll,
       });
+    } else if (cmd === "assistant-withdraw-liquidity") {
+      const sharesStr = getArg("--shares");
+      const amountStr = getArg("--amount");
+      const isAll = hasFlag("--all");
+      if (!sharesStr && !amountStr && !isAll) throw new Error("Missing --shares, --amount, or --all");
+
+      const wallet = await loadWallet();
+      const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
+      const decimals = await publicClient.readContract({ address: protocol.debtAsset, abi: erc20Abi, functionName: "decimals" });
+
+      let sharesToWithdraw: bigint;
+      if (isAll) {
+        sharesToWithdraw = await publicClient.readContract({
+          address: protocol.debtPool,
+          abi: debtPoolAbi,
+          functionName: "balanceOf",
+          args: [wallet.address]
+        }) as any;
+      } else if (sharesStr) {
+        sharesToWithdraw = parseUnits(sharesStr, Number(decimals));
+      } else {
+        const amount = parseUnits(amountStr!, Number(decimals));
+        sharesToWithdraw = await publicClient.readContract({
+          address: protocol.debtPool,
+          abi: debtPoolAbi,
+          functionName: "previewDeposit",
+          args: [amount]
+        }) as any;
+      }
+
+      const expectedAssetsWei = await publicClient.readContract({
+        address: protocol.debtPool,
+        abi: debtPoolAbi,
+        functionName: "previewWithdraw",
+        args: [sharesToWithdraw],
+      });
+      const hash = await walletClient.writeContract({
+        address: protocol.debtPool,
+        abi: debtPoolAbi,
+        functionName: "withdraw",
+        args: [sharesToWithdraw]
+      });
+      await publicClient.waitForTransactionReceipt({ hash });
+      const position = await getPoolPosition(publicClient, protocol, wallet.address);
+      const assetsText = formatDisplayAmount(expectedAssetsWei, position.assetDecimals);
+      const shareText = formatDisplayAmount(position.shares, position.assetDecimals);
+
+      printJson(
+        buildAssistantActionResponse(
+          "withdraw",
+          `About ${assetsText} ${position.assetSymbol} withdrawn. Remaining shares: ${shareText}.`,
+          `Withdrew about ${assetsText} ${position.assetSymbol}. Remaining shares: ${shareText}.`,
+        ),
+      );
     } else if (cmd === "monitor-pool") {
       const overview = await getPoolOverview(publicClient, protocol);
       console.log(`Yield is currently ${(overview.supplyApyBps / 100).toFixed(2)}%. Pool utilization: ${(overview.utilizationBps / 100).toFixed(2)}%`);

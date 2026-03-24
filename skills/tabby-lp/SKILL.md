@@ -23,8 +23,10 @@ All commands must be run as: `/home/tabby/bin/tabby-lp.sh <command>`
 /home/tabby/bin/tabby-lp.sh pool-status --json
 /home/tabby/bin/tabby-lp.sh assistant-position
 /home/tabby/bin/tabby-lp.sh position --json
+/home/tabby/bin/tabby-lp.sh assistant-deposit-liquidity --amount 100
 /home/tabby/bin/tabby-lp.sh approve-asset --amount 100
 /home/tabby/bin/tabby-lp.sh deposit-liquidity --amount 100
+/home/tabby/bin/tabby-lp.sh assistant-withdraw-liquidity --all
 /home/tabby/bin/tabby-lp.sh withdraw-liquidity --all
 /home/tabby/bin/tabby-lp.sh monitor-pool
 ```
@@ -36,6 +38,9 @@ All commands must be run as: `/home/tabby/bin/tabby-lp.sh <command>`
 - Do not print shell commands to the user unless they explicitly ask for the command.
 - For pool-read answers, use `/home/tabby/bin/tabby-lp.sh assistant-pool-status` and return its stdout verbatim.
 - For LP position answers, use `/home/tabby/bin/tabby-lp.sh assistant-position` and return its stdout verbatim.
+- For LP deposit and withdraw actions, use the deterministic assistant commands and return stdout verbatim:
+  - `/home/tabby/bin/tabby-lp.sh assistant-deposit-liquidity --amount ...`
+  - `/home/tabby/bin/tabby-lp.sh assistant-withdraw-liquidity ...`
 - Use `pool-status --json` and `position --json` when the UI needs structured payloads.
 - If a command fails, return the actual command error briefly in `text`.
 

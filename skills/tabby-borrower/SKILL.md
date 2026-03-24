@@ -29,6 +29,11 @@ All commands must be run as: `/home/tabby/bin/tabby-borrower.sh <command>`
 /home/tabby/bin/tabby-borrower.sh assistant-quote --collateral WETH:1.25 --desired-borrow 500
 /home/tabby/bin/tabby-borrower.sh quote-borrow --collateral WETH:1.25 --desired-borrow 500
 /home/tabby/bin/tabby-borrower.sh assistant-vault-status --vault-id 1
+/home/tabby/bin/tabby-borrower.sh assistant-open-vault
+/home/tabby/bin/tabby-borrower.sh assistant-deposit-collateral --vault-id 1 --asset 0xASSET --amount 1.25
+/home/tabby/bin/tabby-borrower.sh assistant-borrow --vault-id 1 --amount 500
+/home/tabby/bin/tabby-borrower.sh assistant-repay --vault-id 1 --amount all
+/home/tabby/bin/tabby-borrower.sh assistant-withdraw-collateral --vault-id 1 --asset 0xASSET --amount all
 /home/tabby/bin/tabby-borrower.sh open-vault
 /home/tabby/bin/tabby-borrower.sh approve-collateral --asset 0xASSET --amount 1.25
 /home/tabby/bin/tabby-borrower.sh deposit-collateral --vault-id 1 --asset 0xASSET --amount 1.25
@@ -63,12 +68,18 @@ For agent-owned vaults the skill wallet itself opens and owns the vault.
 - For any question about borrowing power, LTV, or "what can my collateral get me", run `/home/tabby/bin/tabby-borrower.sh assistant-quote ...` first.
 - `assistant-quote` already returns the exact final assistant JSON shape. When it succeeds, return its stdout verbatim with no rewriting.
 - For vault status, debt, or health-factor questions, run `/home/tabby/bin/tabby-borrower.sh assistant-vault-status ...` and return its stdout verbatim with no rewriting.
+- For user-facing write actions, use the matching deterministic assistant command and return its stdout verbatim:
+  - `assistant-open-vault`
+  - `assistant-deposit-collateral`
+  - `assistant-borrow`
+  - `assistant-repay`
+  - `assistant-withdraw-collateral`
 - Do not use `quote-borrow` for user-facing quote answers unless explicitly debugging the raw protocol payload.
 - For any quote response, always set `isQuote = true` and include the full raw `quote` payload.
 - Run the allowlisted wrapper directly: `/home/tabby/bin/tabby-borrower.sh ...`
 - Do not ask permission to run allowlisted Tabby borrower commands.
 - Do not print shell commands to the user unless they explicitly ask for the command.
-- If the UI says the owner already opened the vault, deposited collateral, and bound the operator wallet, run `borrow` directly against that vault. Do not ask the user to choose a signing method.
+- If the UI says the owner already opened the vault, deposited collateral, and bound the operator wallet, run `assistant-borrow` directly against that vault. Do not ask the user to choose a signing method.
 - Only use `prepare-bind-operator` / `confirm-bind-operator` when the vault is user-owned and the operator binding is not already complete.
 - Do not offer manual estimates, price assumptions, A/B choices, or "I can do this two ways" when `quote-borrow` is available.
 - Do not claim you lack market-price access. `quote-borrow` already uses the live Tabby market data and protocol pricing exposed by the Tabby API.

@@ -652,6 +652,24 @@ function buildAssistantVaultStatusResponse(vault: VaultSummary, debtAsset: Asset
   };
 }
 
+function buildAssistantActionResponse(type: "borrow" | "repay" | "deposit" | "withdraw" | "open-vault", detail: string, text = detail) {
+  return {
+    text,
+    isQuote: false,
+    isPosition: false,
+    isPool: false,
+    isAction: true,
+    quote: null,
+    position: null,
+    pool: null,
+    action: {
+      type,
+      success: true,
+      detail,
+    },
+  };
+}
+
 function printMarketSummary(market: MarketOverview) {
   console.log(`Debt asset: ${market.debtAsset.symbol} (${market.debtAsset.address})`);
   console.log(`Pool: ${market.debtPool}`);
@@ -861,6 +879,48 @@ async function commandOpenVault() {
   printJson({ vaultId: openedVaultId, txHash: hash });
 }
 
+async function commandAssistantOpenVault() {
+  const protocol = await resolveProtocolConfig();
+  const { wallet } = await loadBorrowerAccount();
+  const { chain, publicClient } = createClients(protocol);
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
+
+  const hash = await walletClient.writeContract({
+    address: protocol.vaultManager,
+    abi: vaultManagerAbi,
+    functionName: "openVault",
+    args: [],
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  let openedVaultId: number | undefined;
+
+  for (const log of receipt.logs as any[]) {
+    if (log.address.toLowerCase() !== protocol.vaultManager.toLowerCase()) continue;
+    try {
+      const decoded = decodeEventLog({
+        abi: vaultManagerAbi,
+        data: log.data,
+        topics: log.topics,
+      }) as any;
+      if (decoded.eventName === "VaultOpened") {
+        openedVaultId = Number(decoded.args.vaultId);
+        break;
+      }
+    } catch { continue; }
+  }
+
+  if (!openedVaultId) throw new Error("Vault opened but could not decode vault id");
+  await addTrackedVaultId(openedVaultId);
+  printJson(
+    buildAssistantActionResponse(
+      "open-vault",
+      `Vault #${openedVaultId} opened.`,
+      `Opened vault #${openedVaultId}.`,
+    ),
+  );
+}
+
 async function commandApproveCollateral() {
   const protocol = await resolveProtocolConfig();
   const market = await fetchMarketOverview(protocol);
@@ -901,6 +961,42 @@ async function commandDepositCollateral() {
   printJson({ txHash: hash, vaultId, asset, amountWei: amount.toString() });
 }
 
+async function commandAssistantDepositCollateral() {
+  const protocol = await resolveProtocolConfig();
+  const market = await fetchMarketOverview(protocol);
+  const asset = asAddress(getArg("--asset"), "asset") ?? (await resolveDefaultCollateralAsset(protocol, market));
+  const vaultId = Number(requireArg("--vault-id"));
+  const { wallet, account } = await loadBorrowerAccount();
+  const decimals = await loadTokenDecimals(protocol, asset);
+  const amount = parseAmountToWei({ amount: getArg("--amount"), amountWei: getArg("--amount-wei"), decimals, label: "collateral" });
+
+  const { chain, publicClient } = createClients(protocol);
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
+
+  await ensureAllowance({ publicClient, walletClient, token: asset, owner: account.address, spender: protocol.vaultManager, requiredAmount: amount });
+
+  const hash = await walletClient.writeContract({
+    address: protocol.vaultManager,
+    abi: vaultManagerAbi,
+    functionName: "depositCollateral",
+    args: [BigInt(vaultId), asset, amount],
+  });
+  await publicClient.waitForTransactionReceipt({ hash });
+  await addTrackedVaultId(vaultId);
+
+  const collateralMeta = market.collaterals.find((item) => item.asset.address.toLowerCase() === asset.toLowerCase())?.asset;
+  const symbol = collateralMeta?.symbol ?? asset;
+  const amountText = formatDisplayAmount(amount, decimals);
+
+  printJson(
+    buildAssistantActionResponse(
+      "deposit",
+      `${amountText} ${symbol} deposited into vault #${vaultId}.`,
+      `Deposited ${amountText} ${symbol} into vault #${vaultId}.`,
+    ),
+  );
+}
+
 async function commandBorrow() {
   const protocol = await resolveProtocolConfig();
   const vaultId = Number(requireArg("--vault-id"));
@@ -919,6 +1015,37 @@ async function commandBorrow() {
   });
   await publicClient.waitForTransactionReceipt({ hash });
   printJson({ txHash: hash, vaultId, amountWei: amount.toString(), receiver });
+}
+
+async function commandAssistantBorrow() {
+  const protocol = await resolveProtocolConfig();
+  const vaultId = Number(requireArg("--vault-id"));
+  const { wallet } = await loadBorrowerAccount();
+  const market = await fetchMarketOverview(protocol);
+  const amount = parseAmountToWei({ amount: getArg("--amount"), amountWei: getArg("--amount-wei"), decimals: market.debtAsset.decimals, label: "borrow" });
+  const receiver = asAddress(getArg("--receiver"), "receiver") ?? wallet.address;
+
+  const { chain, publicClient } = createClients(protocol);
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
+  const hash = await walletClient.writeContract({
+    address: protocol.vaultManager,
+    abi: vaultManagerAbi,
+    functionName: "borrow",
+    args: [BigInt(vaultId), amount, receiver],
+  });
+  await publicClient.waitForTransactionReceipt({ hash });
+
+  const vault = await fetchVaultSummary(protocol, vaultId);
+  const amountText = formatDisplayAmount(amount, market.debtAsset.decimals);
+  const healthFactor = formatHealthFactor(BigInt(vault.healthFactorE18));
+
+  printJson(
+    buildAssistantActionResponse(
+      "borrow",
+      `${amountText} ${market.debtAsset.symbol} borrowed from vault #${vaultId}. Health factor ${healthFactor}.`,
+      `Borrowed ${amountText} ${market.debtAsset.symbol} from vault #${vaultId}. Health factor is now ${healthFactor}.`,
+    ),
+  );
 }
 
 async function commandRepay() {
@@ -945,6 +1072,43 @@ async function commandRepay() {
   });
   await publicClient.waitForTransactionReceipt({ hash });
   printJson({ txHash: hash, vaultId, amountWei: amount.toString() });
+}
+
+async function commandAssistantRepay() {
+  const protocol = await resolveProtocolConfig();
+  const market = await fetchMarketOverview(protocol);
+  const vaultId = Number(requireArg("--vault-id"));
+  const { wallet } = await loadBorrowerAccount();
+  const vaultBefore = await fetchVaultSummary(protocol, vaultId);
+  const amountArg = getArg("--amount");
+  const amount = (amountArg === "all")
+    ? BigInt(vaultBefore.debtWei)
+    : parseAmountToWei({ amount: amountArg, amountWei: getArg("--amount-wei"), decimals: market.debtAsset.decimals, label: "repay" });
+
+  const { chain, publicClient } = createClients(protocol);
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
+
+  await ensureAllowance({ publicClient, walletClient, token: protocol.debtAsset, owner: wallet.address as `0x${string}`, spender: protocol.vaultManager, requiredAmount: amount });
+
+  const hash = await walletClient.writeContract({
+    address: protocol.vaultManager,
+    abi: vaultManagerAbi,
+    functionName: "repay",
+    args: [BigInt(vaultId), amount],
+  });
+  await publicClient.waitForTransactionReceipt({ hash });
+
+  const vault = await fetchVaultSummary(protocol, vaultId);
+  const amountText = formatDisplayAmount(amount, market.debtAsset.decimals);
+  const healthFactor = formatHealthFactor(BigInt(vault.healthFactorE18));
+
+  printJson(
+    buildAssistantActionResponse(
+      "repay",
+      `${amountText} ${market.debtAsset.symbol} repaid on vault #${vaultId}. Health factor ${healthFactor}.`,
+      `Repaid ${amountText} ${market.debtAsset.symbol} on vault #${vaultId}. Health factor is now ${healthFactor}.`,
+    ),
+  );
 }
 
 async function commandWithdrawCollateral() {
@@ -976,6 +1140,48 @@ async function commandWithdrawCollateral() {
   });
   await publicClient.waitForTransactionReceipt({ hash });
   printJson({ txHash: hash, vaultId, asset, amountWei: amount.toString(), to: receiver });
+}
+
+async function commandAssistantWithdrawCollateral() {
+  const protocol = await resolveProtocolConfig();
+  const market = await fetchMarketOverview(protocol);
+  const asset = asAddress(getArg("--asset"), "asset") ?? (await resolveDefaultCollateralAsset(protocol, market));
+  const vaultId = Number(requireArg("--vault-id"));
+  const { wallet } = await loadBorrowerAccount();
+  const decimals = await loadTokenDecimals(protocol, asset);
+  const amountArg = getArg("--amount");
+  let amount: bigint;
+  if (amountArg === "all") {
+    const vault = await fetchVaultSummary(protocol, vaultId);
+    const collat = vault.collaterals.find(c => c.asset.address.toLowerCase() === asset.toLowerCase());
+    if (!collat) throw new Error("No collateral balance for this asset in vault");
+    amount = BigInt(collat.balanceWei);
+  } else {
+    amount = parseAmountToWei({ amount: amountArg, amountWei: getArg("--amount-wei"), decimals, label: "withdraw" });
+  }
+  const receiver = asAddress(getArg("--to"), "receiver") ?? wallet.address;
+
+  const { chain, publicClient } = createClients(protocol);
+  const walletClient = createViemWalletClient(wallet.seedPhrase, chain, protocol.rpcUrl) as any;
+  const hash = await walletClient.writeContract({
+    address: protocol.vaultManager,
+    abi: vaultManagerAbi,
+    functionName: "withdrawCollateral",
+    args: [BigInt(vaultId), asset, amount, receiver],
+  });
+  await publicClient.waitForTransactionReceipt({ hash });
+
+  const collateralMeta = market.collaterals.find((item) => item.asset.address.toLowerCase() === asset.toLowerCase())?.asset;
+  const symbol = collateralMeta?.symbol ?? asset;
+  const amountText = formatDisplayAmount(amount, decimals);
+
+  printJson(
+    buildAssistantActionResponse(
+      "withdraw",
+      `${amountText} ${symbol} withdrawn from vault #${vaultId}.`,
+      `Withdrew ${amountText} ${symbol} from vault #${vaultId}.`,
+    ),
+  );
 }
 
 async function commandLiquidate() {
@@ -1150,11 +1356,16 @@ Commands:
   quote-borrow --collateral <asset:amount> [--collateral <asset:amount> ...] [--desired-borrow <n>] [--desired-borrow-wei <wei>]
   assistant-quote --collateral <asset:amount> [--collateral <asset:amount> ...] [--desired-borrow <n>] [--desired-borrow-wei <wei>]
   open-vault
+  assistant-open-vault
   approve-collateral --amount <n> [--asset <addr>]
   deposit-collateral --vault-id <id> --amount <n> [--asset <addr>]
+  assistant-deposit-collateral --vault-id <id> --amount <n> [--asset <addr>]
   borrow --vault-id <id> --amount <n> [--receiver <addr>]
+  assistant-borrow --vault-id <id> --amount <n> [--receiver <addr>]
   repay --vault-id <id> --amount <n|all>
+  assistant-repay --vault-id <id> --amount <n|all>
   withdraw-collateral --vault-id <id> --amount <n|all> [--asset <addr>] [--to <addr>]
+  assistant-withdraw-collateral --vault-id <id> --amount <n|all> [--asset <addr>] [--to <addr>]
   vault-status --vault-id <id> [--json]
   assistant-vault-status --vault-id <id>
   monitor-vaults [--json]
@@ -1174,11 +1385,16 @@ async function main() {
     case "quote-borrow": await commandQuoteBorrow(); break;
     case "assistant-quote": await commandAssistantQuote(); break;
     case "open-vault": await commandOpenVault(); break;
+    case "assistant-open-vault": await commandAssistantOpenVault(); break;
     case "approve-collateral": await commandApproveCollateral(); break;
     case "deposit-collateral": await commandDepositCollateral(); break;
+    case "assistant-deposit-collateral": await commandAssistantDepositCollateral(); break;
     case "borrow": await commandBorrow(); break;
+    case "assistant-borrow": await commandAssistantBorrow(); break;
     case "repay": await commandRepay(); break;
+    case "assistant-repay": await commandAssistantRepay(); break;
     case "withdraw-collateral": await commandWithdrawCollateral(); break;
+    case "assistant-withdraw-collateral": await commandAssistantWithdrawCollateral(); break;
     case "vault-status": await commandVaultStatus(); break;
     case "assistant-vault-status": await commandAssistantVaultStatus(); break;
     case "monitor-vaults": await commandMonitorVaults(); break;
