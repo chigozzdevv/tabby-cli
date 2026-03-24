@@ -4,6 +4,11 @@ Tabby is a permissionless, overcollateralized USDT0 lending protocol on Plasma f
 
 Borrowers open reusable vaults, lock supported collateral, and borrow `USDT0`. Liquidity providers supply `USDT0` to `DebtPool` and earn yield through pool shares. Agents can either borrow from their own vaults or operate human-owned vaults through explicit onchain permissions.
 
+## Demo
+
+- Video Demo: [https://youtu.be/frlohQT-7is](https://youtu.be/frlohQT-7is)
+- Try Live: [https://tabby-bot.vercel.app/](https://tabby-bot.vercel.app/)
+
 ## Overview
 
 Tabby has a single debt asset, a single liquidity pool, and reusable borrower vaults.
