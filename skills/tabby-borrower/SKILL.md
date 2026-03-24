@@ -26,6 +26,7 @@ All commands must be run as: `/home/tabby/bin/tabby-borrower.sh <command>`
 ```bash
 /home/tabby/bin/tabby-borrower.sh init-wallet
 /home/tabby/bin/tabby-borrower.sh market
+/home/tabby/bin/tabby-borrower.sh assistant-quote --collateral WETH:1.25 --desired-borrow 500
 /home/tabby/bin/tabby-borrower.sh quote-borrow --collateral WETH:1.25 --desired-borrow 500
 /home/tabby/bin/tabby-borrower.sh open-vault
 /home/tabby/bin/tabby-borrower.sh approve-collateral --asset 0xASSET --amount 1.25
@@ -48,6 +49,7 @@ For agent-owned vaults the skill wallet itself opens and owns the vault.
 
 ## Quote Input
 
+- For assistant quote replies, use `assistant-quote`, not `quote-borrow`.
 - `quote-borrow` accepts a collateral symbol or collateral address
 - examples: `WETH:2`, `wstETH:1.5`, `0x9895D81bB462A195b4922ED7De0e3ACD007c32CB:2`
 - amounts are human-readable token amounts, not wei
@@ -56,7 +58,9 @@ For agent-owned vaults the skill wallet itself opens and owns the vault.
 
 ## Execution Rules
 
-- For any question about borrowing power, LTV, or "what can my collateral get me", run `quote-borrow` first and answer from that result.
+- For any question about borrowing power, LTV, or "what can my collateral get me", run `/home/tabby/bin/tabby-borrower.sh assistant-quote ...` first.
+- `assistant-quote` already returns the exact final assistant JSON shape. When it succeeds, return its stdout verbatim with no rewriting.
+- Do not use `quote-borrow` for user-facing quote answers unless explicitly debugging the raw protocol payload.
 - For any quote response, always set `isQuote = true` and include the full raw `quote` payload.
 - Run the allowlisted wrapper directly: `/home/tabby/bin/tabby-borrower.sh ...`
 - Do not ask permission to run allowlisted Tabby borrower commands.

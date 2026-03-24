@@ -564,6 +564,73 @@ function formatHealthFactor(hf: bigint) {
     return (Number(hf) / 10**18).toFixed(2);
 }
 
+function formatDisplayAmount(value: bigint | string, decimals: number) {
+  const normalized = Number(formatUnits(typeof value === "string" ? BigInt(value) : value, decimals));
+  if (!Number.isFinite(normalized)) {
+    return formatUnits(typeof value === "string" ? BigInt(value) : value, decimals);
+  }
+  if (normalized >= 1_000_000) return `${(normalized / 1_000_000).toFixed(2)}M`;
+  if (normalized >= 1_000) return `${(normalized / 1_000).toFixed(1)}K`;
+  return normalized.toFixed(normalized < 1 ? 4 : 2);
+}
+
+function collateralCapacityWei(quote: BorrowPreflightQuote) {
+  const priceUsd = BigInt(quote.debtAsset.priceUsd);
+  if (priceUsd === 0n) return 0n;
+  return (BigInt(quote.totals.maxAdditionalBorrowUsd) * 10n ** BigInt(quote.debtAsset.decimals)) / priceUsd;
+}
+
+function quoteConstraintText(quote: BorrowPreflightQuote) {
+  const borrowableNowWei = BigInt(quote.totals.maxAdditionalBorrowWei);
+  const poolAvailableLiquidityWei = BigInt(quote.totals.poolAvailableLiquidityWei);
+  const debtCapHeadroomWei = BigInt(quote.totals.debtCapHeadroomWei);
+
+  if (borrowableNowWei > 0n) return null;
+  if (poolAvailableLiquidityWei === 0n && debtCapHeadroomWei === 0n) {
+    return "No USDT0 is borrowable right now because pool liquidity is empty and the market debt cap has no headroom.";
+  }
+  if (poolAvailableLiquidityWei === 0n) {
+    return "No USDT0 is borrowable right now because the pool has no available liquidity.";
+  }
+  if (debtCapHeadroomWei === 0n) {
+    return "No USDT0 is borrowable right now because the market debt cap is fully used.";
+  }
+  return "Current borrowable amount is constrained by pool liquidity or market limits.";
+}
+
+function buildQuoteSummaryText(quote: BorrowPreflightQuote) {
+  const collateral = quote.requestedCollaterals[0];
+  const ltv = collateral ? `${(collateral.borrowLtvBps / 100).toFixed(2)}%` : "0.00%";
+  const amountLabel =
+    quote.requestedCollaterals.length === 1 && collateral
+      ? `${formatDisplayAmount(collateral.requestedAmountWei, collateral.decimals)} ${collateral.symbol}`
+      : "the selected collateral";
+
+  const borrowableNowWei = BigInt(quote.totals.maxAdditionalBorrowWei);
+  const capacityWei = collateralCapacityWei(quote);
+  const constraint = quoteConstraintText(quote);
+
+  if (borrowableNowWei === 0n && capacityWei > 0n) {
+    return `With ${amountLabel} you have ${formatDisplayAmount(capacityWei, quote.debtAsset.decimals)} ${quote.debtAsset.symbol} of collateral capacity at ${ltv}, but 0 ${quote.debtAsset.symbol} is borrowable right now. ${constraint}`;
+  }
+
+  return `With ${amountLabel} you can borrow up to ${formatDisplayAmount(borrowableNowWei, quote.debtAsset.decimals)} ${quote.debtAsset.symbol} at ${ltv}.`;
+}
+
+function buildAssistantQuoteResponse(quote: BorrowPreflightQuote) {
+  return {
+    text: buildQuoteSummaryText(quote),
+    isQuote: true,
+    isPosition: false,
+    isPool: false,
+    isAction: false,
+    quote,
+    position: null,
+    pool: null,
+    action: null,
+  };
+}
+
 function printMarketSummary(market: MarketOverview) {
   console.log(`Debt asset: ${market.debtAsset.symbol} (${market.debtAsset.address})`);
   console.log(`Pool: ${market.debtPool}`);
@@ -692,6 +759,49 @@ async function commandQuoteBorrow() {
   });
 
   printJson(quote);
+}
+
+async function commandAssistantQuote() {
+  const protocol = await resolveProtocolConfig();
+  const market = await fetchMarketOverview(protocol);
+  const collateralArgs = getArgs("--collateral");
+
+  if (collateralArgs.length === 0) {
+    throw new Error("Missing --collateral <asset:amount>");
+  }
+
+  const collaterals: AssistantCollateralIntent[] = collateralArgs.map((raw) => {
+    const [assetRef, amount] = raw.split(":");
+    if (!assetRef || !amount) {
+      throw new Error(`Invalid collateral input '${raw}'. Use <symbol-or-address>:<amount>.`);
+    }
+
+    const collateral = market.collaterals.find(
+      (item) =>
+        item.asset.address.toLowerCase() === assetRef.toLowerCase() ||
+        item.asset.symbol.toLowerCase() === assetRef.toLowerCase()
+    );
+
+    if (!collateral) {
+      throw new Error(`Unsupported collateral '${assetRef}'. Run market to list supported assets.`);
+    }
+
+    return {
+      asset: collateral.asset.address,
+      amountWei: parseUnits(amount, collateral.asset.decimals).toString(),
+    };
+  });
+
+  const desiredBorrow = getArg("--desired-borrow");
+  const desiredBorrowWei = getArg("--desired-borrow-wei")
+    ?? (desiredBorrow ? parseUnits(desiredBorrow, market.debtAsset.decimals).toString() : undefined);
+
+  const quote = await fetchBorrowPreflightQuote(protocol, {
+    collaterals,
+    desiredBorrowWei,
+  });
+
+  printJson(buildAssistantQuoteResponse(quote));
 }
 
 async function commandOpenVault() {
@@ -1009,6 +1119,7 @@ Commands:
   init-wallet
   market [--json]
   quote-borrow --collateral <asset:amount> [--collateral <asset:amount> ...] [--desired-borrow <n>] [--desired-borrow-wei <wei>]
+  assistant-quote --collateral <asset:amount> [--collateral <asset:amount> ...] [--desired-borrow <n>] [--desired-borrow-wei <wei>]
   open-vault
   approve-collateral --amount <n> [--asset <addr>]
   deposit-collateral --vault-id <id> --amount <n> [--asset <addr>]
@@ -1031,6 +1142,7 @@ async function main() {
     case "init-wallet": await commandInitWallet(); break;
     case "market": await commandMarket(); break;
     case "quote-borrow": await commandQuoteBorrow(); break;
+    case "assistant-quote": await commandAssistantQuote(); break;
     case "open-vault": await commandOpenVault(); break;
     case "approve-collateral": await commandApproveCollateral(); break;
     case "deposit-collateral": await commandDepositCollateral(); break;
